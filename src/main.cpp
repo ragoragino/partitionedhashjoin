@@ -1,24 +1,28 @@
 #include "Common/Logger.h"
 
-#include <boost/log/core.hpp>
-#include <boost/log/trivial.hpp>
-#include <boost/log/expressions.hpp>
-#include <boost/log/sinks/text_file_backend.hpp>
-#include <boost/log/utility/setup/file.hpp>
-#include <boost/log/utility/setup/common_attributes.hpp>
-#include <boost/log/sources/severity_logger.hpp>
-#include <boost/log/sources/record_ostream.hpp>
+#include <thread>
+
+void concurrentLoggingTest(int id)
+{
+    auto logger = Common::Logger::GetNewLogger();
+
+    for (int i = 0; i != 10000; i++) {
+        BOOST_LOG_SEV(logger, Common::Logger::SeverityLevel::info) << "ID: " << id << "; An info message: " << i << ";";
+    }
+}
 
 int main(int argc, char** argv)
 {
     Common::Logger::Configuration logger_configuration{};
-    logger_configuration.severity_level = Common::Logger::SeverityLevel::trace;
+    logger_configuration.severity_level = Common::Logger::SeverityLevel::info;
 
     Common::Logger::InitializeLogger(logger_configuration);
 
-    auto logger = Common::Logger::GetNewLogger();
+    std::thread t1(concurrentLoggingTest, 1);
+    std::thread t2(concurrentLoggingTest, 2);
 
-    BOOST_LOG_SEV(logger, Common::Logger::SeverityLevel::info) << "A regular message";
+    t1.join();
+    t2.join();
 
     return 0;
 }

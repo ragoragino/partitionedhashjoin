@@ -5,18 +5,21 @@
 #include <mutex>
 #include <iostream>
 #include <iomanip>
+
+#include <boost/log/expressions.hpp>
+#include <boost/log/support/date_time.hpp>
+#include <boost/log/expressions/keyword.hpp>
+#include <boost/log/sinks/sync_frontend.hpp>
+#include <boost/log/sinks/text_ostream_backend.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>
 #include <boost/core/null_deleter.hpp>
 #include <boost/log/core.hpp>
 #include <boost/log/attributes/clock.hpp>
-#include <boost/log/expressions.hpp>
-#include <boost/log/sinks/sync_frontend.hpp>
-#include <boost/log/sinks/text_ostream_backend.hpp>
-#include <boost/log/sources/severity_channel_logger.hpp>
-#include <boost/log/sources/record_ostream.hpp>
 #include <boost/log/sources/severity_logger.hpp>
-#include <boost/log/expressions/formatters/date_time.hpp>
-#include <boost/log/support/date_time.hpp>
+#include <boost/log/expressions/formatters/stream.hpp>
+
+// https://theboostcpplibraries.com/boost.log
+// https://www.boost.org/doc/libs/1_56_0/libs/log/example/doc/tutorial_filtering.cpp
 
 BOOST_LOG_ATTRIBUTE_KEYWORD(severity, "Severity", Common::Logger::SeverityLevel)
 BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp, "Timestamp", boost::posix_time::ptime)
@@ -24,6 +27,26 @@ BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp, "Timestamp", boost::posix_time::ptime)
 namespace Common {
     namespace Logger {
         typedef boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend> sink_t;
+
+        std::ostream& operator<< (std::ostream& stream, SeverityLevel level)
+        {
+            static const char* strings[] =
+            {
+                "trace",
+                "debug",
+                "info",
+                "error",
+                "critical"
+            };
+
+            if (static_cast<std::size_t>(level) < sizeof(strings) / sizeof(*strings)) {
+                stream << strings[level];
+            } else {
+                stream << static_cast<int>(level);
+            }                
+
+            return stream;
+        }
 
         struct LoggerOwner {
             Configuration configuration;
@@ -46,7 +69,7 @@ namespace Common {
 
                 default_log_owner->sink = boost::make_shared<sink_t>(backend);
 
-                default_log_owner->sink->set_filter(severity > default_log_owner->configuration.severity_level);
+                default_log_owner->sink->set_filter(severity >= default_log_owner->configuration.severity_level);
                 default_log_owner->sink->set_formatter(boost::log::expressions::stream << severity
                     << " (" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S") << ")" <<
                     ": " << boost::log::expressions::smessage);
@@ -64,9 +87,7 @@ namespace Common {
                 throw std::invalid_argument("Cannot create new logger. Logger was not initialized.");
             }
 
-            boost::log::sources::severity_logger<SeverityLevel> logger{};
-
-            return logger;
+            return boost::log::sources::severity_logger<SeverityLevel>{};
         }
     }
 }

@@ -375,3 +375,4 @@ _deps
 # Custom
 build
 out
+CMakeSettings.json

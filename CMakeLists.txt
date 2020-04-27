@@ -8,10 +8,8 @@ set(CMAKE_CXX_STANDARD 14)
 
 enable_testing()
 
-set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
 find_package(Boost 1.72.0 COMPONENTS program_options log REQUIRED)
-find_package(GTest REQUIRED)
+find_package(GTest 1.11.0 REQUIRED)
 
 add_subdirectory(src)
 add_subdirectory(tests)
