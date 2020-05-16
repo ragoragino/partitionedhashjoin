@@ -11,5 +11,7 @@ enable_testing()
 find_package(Boost 1.72.0 COMPONENTS program_options log REQUIRED)
 find_package(GTest 1.11.0 REQUIRED)
 
+message(${Boost_LIBRARY_DIRS})
+
 add_subdirectory(src)
 add_subdirectory(tests)
