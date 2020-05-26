@@ -70,12 +70,12 @@ std::future<void> WorkPipe::Push(std::function<void()>&& f) {
         throw std::runtime_error("Cannot push to WorkPipe because it had already been stopped!");
     }
 
-    // TODO: Do not use WorkManager na optimize for 1-task case?
+    // TODO: Do not use WorkManager and optimize for 1-task case?
     auto workManager =
         std::make_shared<WorkManager>(std::vector<std::function<void()>>{std::move(f)});
 
     auto tasks = workManager->GetTasks();
-    for (std::function<void()>& task : tasks) {
+    for (auto&& task : tasks) {
         m_global_workqueue.push(std::move(task));
     }
 
@@ -94,7 +94,7 @@ std::future<void> WorkPipe::Push(std::vector<std::function<void()>>&& f) {
     auto workManager = std::make_shared<WorkManager>(std::move(f));
 
     auto tasks = workManager->GetTasks();
-    for (std::function<void()>& task : tasks) {
+    for (auto&& task : tasks) {
         m_global_workqueue.push(std::move(task));
     }
 
@@ -114,7 +114,8 @@ std::tuple<bool, std::function<void()>> WorkPipe::Wait() {
         return std::make_tuple<bool, std::function<void()>>(true, std::function<void()>());
     }
 
-    m_condition_variable.wait(lock, [this]() { return !m_global_workqueue.empty() || m_stopped; });
+    m_condition_variable.wait(lock,
+                              [this]() { return !m_global_workqueue.empty() || m_stopped; });
 
     if (!m_global_workqueue.empty()) {
         std::function<void()> element(std::move(m_global_workqueue.front()));

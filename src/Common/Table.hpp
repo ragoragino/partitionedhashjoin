@@ -29,7 +29,7 @@ class Table {
 
     const Tuple& operator[](size_t index) const;
 
-    size_t GetSize();
+    size_t GetSize() const;
 
    private:
     // To minimize the posobility of false sharing in cache, we align the vector on

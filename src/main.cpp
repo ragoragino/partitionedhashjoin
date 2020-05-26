@@ -23,8 +23,8 @@ int main(int argc, char** argv) {
 
     auto logger = Common::GetNewLogger();
 
-    uint64_t primaryKeyRelationSize = 16'000;
-    uint64_t secondaryKeyRelationSize = 256'000;
+    uint64_t primaryKeyRelationSize = 16'000'000;
+    uint64_t secondaryKeyRelationSize = 256'000'000;
 
     std::string primaryFilename = "primary_relation.txt";
     std::string secondaryFilename = "secondary_relation.txt";
@@ -67,24 +67,6 @@ int main(int argc, char** argv) {
     threadPool->Stop();
 
     BOOST_LOG_SEV(logger, Common::SeverityLevel::info) << "Generating finished.";
-
-    std::ofstream primaryFile(primaryFilename);
-    for (int i = 0; i != primaryKeyRelation->GetSize(); i++) {
-        if (primaryFile.is_open()) {
-            primaryFile << (*primaryKeyRelation)[i] << "\n";
-        }
-    }
-
-    primaryFile.close();
-
-    std::ofstream secondaryFile(secondaryFilename);
-    for (int i = 0; i != secondaryKeyRelation->GetSize(); i++) {
-        if (secondaryFile.is_open()) {
-            secondaryFile << (*secondaryKeyRelation)[i] << "\n";
-        }
-    }
-
-    secondaryFile.close();
 
     /*
     HashJoin::NoPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);

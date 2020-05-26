@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
-#include "DataGenerator/ZipfTest.cpp"
+#include "DataGenerator/ZipfTest.hpp"
+#include "NoPartitioningHashJoin/HashTableTest.hpp"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

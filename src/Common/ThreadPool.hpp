@@ -5,6 +5,7 @@
 #include <memory>
 #include <queue>
 #include <vector>
+#include <atomic>
 
 #include "IThreadPool.hpp"
 
@@ -37,7 +38,7 @@ class WorkPipe {
     std::condition_variable m_condition_variable;
     std::queue<std::function<void()>> m_global_workqueue;
     std::mutex m_global_workqueue_mutex;
-    bool m_stopped;
+    bool m_stopped; // it also protected by m_global_workqueue
 };
 
 // Worker is the owner of a thread and executes tasks from WorkPipe
