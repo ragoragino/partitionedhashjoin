@@ -16,6 +16,5 @@ class HashJoiner {
     private:
         std::shared_ptr<Common::IThreadPool> m_threadPool;
         Configuration m_configuration;
-        Common::LoggerType m_logger;
 };
 }  // namespace NoPartitioning

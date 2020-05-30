@@ -40,7 +40,6 @@ class WorkPipe {
     std::queue<std::function<void()>> m_global_workqueue;
     std::mutex m_global_workqueue_mutex;
     bool m_stopped; // it also protected by m_global_workqueue
-    LoggerType m_logger;
 };
 
 // Worker is the owner of a thread and executes tasks from WorkPipe

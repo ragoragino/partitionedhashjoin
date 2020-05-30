@@ -3,9 +3,8 @@ Necessary requirements:
 
 Work in progress
 
-TODO (26.5.):
-- solve issue with last Worker
-- verify correctness of HashTable
+TODO (30.5.):
+- verify correctness of HashTable + optimize memory allocations and destructor
 - add google benchmarking
 - write unit tests (e.g. ThreadPool)
 - start writing hash join logic:

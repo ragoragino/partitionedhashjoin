@@ -63,9 +63,7 @@ void WorkManager::finished() {
     }
 }
 
-WorkPipe::WorkPipe() : m_stopped(false), m_logger(Common::GetNewLogger()) {
-    Common::AddComponentAttributeToLogger(m_logger, "WorkPipe");
-}
+WorkPipe::WorkPipe() : m_stopped(false) {}
 
 std::future<void> WorkPipe::Push(std::function<void()>&& f) {
     std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
@@ -82,8 +80,6 @@ std::future<void> WorkPipe::Push(std::function<void()>&& f) {
     for (auto&& task : tasks) {
         m_global_workqueue.push(std::move(task));
     }
-
-    LOG(m_logger, SeverityLevel::debug) << "Pushing " << tasks.size() << " tasks to the queue.";
 
     m_condition_variable.notify_all();
 
@@ -104,8 +100,6 @@ std::future<void> WorkPipe::Push(std::vector<std::function<void()>>&& f) {
         m_global_workqueue.push(std::move(task));
     }
 
-    LOG(m_logger, SeverityLevel::debug) << "Pushing " << tasks.size() << " tasks to the queue.";
-
     m_condition_variable.notify_all();
 
     return workManager->GetFuture();
@@ -115,35 +109,24 @@ std::tuple<bool, std::function<void()>> WorkPipe::Wait(size_t id) {
     std::unique_lock<std::mutex> lock(m_global_workqueue_mutex);
 
     if (!m_global_workqueue.empty()) {
-        LOG(m_logger, SeverityLevel::debug) << "Popping one from work pipe for "
-                                            << id << ". Current size: " << m_global_workqueue.size();
-
+ 
         std::function<void()> element(std::move(m_global_workqueue.front()));
         m_global_workqueue.pop();
         return std::make_tuple<bool, std::function<void()>>(false, std::move(element));
     } else if (m_stopped) {
-        LOG(m_logger, SeverityLevel::debug)
-            << "Work pipe stopped. Sending stop signal to worker " << id << ".";
 
         return std::make_tuple<bool, std::function<void()>>(true, std::function<void()>());
     }
-
-    LOG(m_logger, SeverityLevel::debug)
-        << "Worker " << id << " waiting on lock";
 
     m_condition_variable.wait(lock,
                               [this]() { return !m_global_workqueue.empty() || m_stopped; });
 
     if (!m_global_workqueue.empty()) {
-        LOG(m_logger, SeverityLevel::debug)
-            << "Popping one from work pipe for " << id << " after waiting on cv. Current size: " << m_global_workqueue.size();
 
         std::function<void()> element(std::move(m_global_workqueue.front()));
         m_global_workqueue.pop();
         return std::make_tuple<bool, std::function<void()>>(false, std::move(element));
     }
-
-    LOG(m_logger, SeverityLevel::debug) << "Work pipe stopped. Sending stop signal to worker " << id << " after waiting on cv.";
 
     return std::make_tuple<bool, std::function<void()>>(true, std::function<void()>());
 }
@@ -152,9 +135,6 @@ void WorkPipe::Stop() {
     std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
 
     m_stopped = true;
-
-    LOG(m_logger, SeverityLevel::info)
-        << "Work pipe received stop signal.";
 
     m_condition_variable.notify_all();
 }
@@ -171,6 +151,8 @@ void Worker::Start(std::shared_ptr<WorkPipe> workPipe) {
 
 void Worker::Run(std::shared_ptr<WorkPipe> workPipe) {
     auto threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    
+    auto logger = GetNewLogger();
 
     while (true) {
         auto work = workPipe->Wait(threadID);

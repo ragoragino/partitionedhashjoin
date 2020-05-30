@@ -5,9 +5,7 @@
 
 namespace NoPartitioning {
 HashJoiner::HashJoiner(Configuration configuration, std::shared_ptr<Common::IThreadPool> threadPool)
-    : m_configuration(configuration), m_threadPool(threadPool), m_logger(Common::GetNewLogger()) {
-    Common::AddComponentAttributeToLogger(m_logger, "HashJoiner");
-}
+    : m_configuration(configuration), m_threadPool(threadPool) {}
 
 void HashJoiner::Run(std::shared_ptr<Common::Table> tableA, std::shared_ptr<Common::Table> tableB) {
     const size_t tableASize = tableA->GetSize();
@@ -30,16 +28,10 @@ void HashJoiner::Run(std::shared_ptr<Common::Table> tableA, std::shared_ptr<Comm
     }
 
     auto populateHashTable = [this, &tableA, hashTable](size_t tableStart, size_t tableEnd) {
-        LOG(m_logger, Common::SeverityLevel::debug)
-            << "Joining ranges: " << tableStart << " - " << tableEnd << ".";
-
         for (size_t i = tableStart; i != tableEnd; i++) {
             const Common::Tuple& tuple = (*tableA)[i];
             hashTable->Insert(tuple.id, &tuple);
         }
-
-        LOG(m_logger, Common::SeverityLevel::debug)
-            << "Joining ranges: " << tableStart << " - " << tableEnd << " finished.";
     };
 
     std::vector<std::function<void()>> tasks;
