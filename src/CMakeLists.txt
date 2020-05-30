@@ -5,7 +5,8 @@ add_library(phjoinlib STATIC
 	"Common/Random.cpp"
 	"DataGenerator/Zipf.cpp" 
 	"DataGenerator/Sequential.cpp"
-	)
+	"Common/Allocator.cpp" 
+	"NoPartitioning/HashJoin.cpp")
 
 target_compile_features(phjoinlib PUBLIC cxx_std_17)
 target_include_directories(phjoinlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -15,7 +16,9 @@ target_link_libraries(phjoinlib PUBLIC ${Boost_LIBRARIES})
 
 target_link_libraries(phjoinlib PUBLIC xxhash_cpp::xxhash_cpp)
 
-add_executable(phjoin main.cpp )
+target_link_libraries(phjoinlib PUBLIC mimalloc)
+
+add_executable(phjoin main.cpp)
 target_link_libraries(phjoin phjoinlib)
 target_compile_features(phjoin PUBLIC cxx_std_17)
 target_include_directories(phjoin PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

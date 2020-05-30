@@ -11,17 +11,30 @@
 #include "Common/Logger.hpp"
 #include "Common/Random.hpp"
 #include "Common/Table.hpp"
+#include "Common/Configuration.hpp"
 #include "Common/ThreadPool.hpp"
 #include "DataGenerator/Sequential.hpp"
 #include "DataGenerator/Zipf.hpp"
+#include "NoPartitioning/HashJoin.hpp"
+
+#include <mimalloc.h>
 
 int main(int argc, char** argv) {
+    mi_version();  // ensure mimalloc library is linked
+
+    Common::Configuration configuration{NoPartitioning::Configuration{
+        10000, // MIN_BATCH_SIZE
+        0.75, // HASH_TABLE_SIZE_RATIO
+        1'000'000'000, // HASH_TABLE_SIZE_LIMIT
+    }};
+
     Common::LoggerConfiguration logger_configuration{};
-    logger_configuration.severity_level = Common::SeverityLevel::info;
+    logger_configuration.severity_level = Common::SeverityLevel::trace;
 
     Common::InitializeLogger(logger_configuration);
 
     auto logger = Common::GetNewLogger();
+    Common::AddComponentAttributeToLogger(logger, "main");
 
     uint64_t primaryKeyRelationSize = 16'000'000;
     uint64_t secondaryKeyRelationSize = 256'000'000;
@@ -29,7 +42,7 @@ int main(int argc, char** argv) {
     std::string primaryFilename = "primary_relation.txt";
     std::string secondaryFilename = "secondary_relation.txt";
 
-    BOOST_LOG_SEV(logger, Common::SeverityLevel::info)
+    LOG(logger, Common::SeverityLevel::info)
         << "Generating primary relation with size " << primaryKeyRelationSize << " and "
         << "secondary relation with size " << secondaryKeyRelationSize << ".";
 
@@ -64,12 +77,21 @@ int main(int argc, char** argv) {
     generatePrimaryKeyRelationFuture.wait();
     generateSecondaryKeyRelationFuture.wait();
 
+    LOG(logger, Common::SeverityLevel::info) << "Generating finished.";
+
+    LOG(logger, Common::SeverityLevel::info) << "Executing NoPartitionHashJoin algorithm.";
+
+    NoPartitioning::HashJoiner noPartitioningHashJoiner(configuration.NoPartitioningConfiguration, threadPool);
+
+    noPartitioningHashJoiner.Run(primaryKeyRelation, secondaryKeyRelation);
+
+    LOG(logger, Common::SeverityLevel::info) << "Running NoPartitionHashJoin finished.";
+
     threadPool->Stop();
 
-    BOOST_LOG_SEV(logger, Common::SeverityLevel::info) << "Generating finished.";
+    LOG(logger, Common::SeverityLevel::info) << "ThreadPool stopped.";
 
     /*
-    HashJoin::NoPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
     HashJoin::RadixClusterPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
 
     // Data distribution with low skew

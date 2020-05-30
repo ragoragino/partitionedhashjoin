@@ -11,6 +11,7 @@
 #include <boost/log/sources/severity_logger.hpp>
 #include <boost/log/support/date_time.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>
+#include <boost/log/attributes/constant.hpp>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -20,6 +21,7 @@
 
 BOOST_LOG_ATTRIBUTE_KEYWORD(severity, "Severity", Common::SeverityLevel)
 BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp, "Timestamp", boost::posix_time::ptime)
+BOOST_LOG_ATTRIBUTE_KEYWORD(component, "Component", std::string)
 
 namespace Common {
 typedef boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend> sink_t;
@@ -60,8 +62,9 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
                                             default_log_owner->configuration.severity_level);
         default_log_owner->sink->set_formatter(
             boost::log::expressions::stream
-            << severity << " (" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S")
-            << ")"
+            << "(" << component << ") "
+            << "(" << severity << ") "
+            << "(" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S") << ") "
             << ": " << boost::log::expressions::smessage);
 
         boost::log::core::get()->add_sink(default_log_owner->sink);
@@ -73,11 +76,15 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
     }
 }
 
-boost::log::sources::severity_logger<SeverityLevel> GetNewLogger() {
+LoggerType GetNewLogger() {
     if (!default_log_owner) {
         throw std::runtime_error("Cannot create new logger. Logger was not initialized.");
     }
 
-    return boost::log::sources::severity_logger<SeverityLevel>{};
+    return LoggerType{};
+}
+
+void AddComponentAttributeToLogger(LoggerType& logger, std::string componentName) {
+    logger.add_attribute("Component", boost::log::attributes::constant<std::string>(componentName));
 }
 }  // namespace Common

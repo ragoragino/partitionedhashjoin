@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "IThreadPool.hpp"
+#include "Logger.hpp"
 
 namespace Common {
 
@@ -27,7 +28,7 @@ class WorkPipe {
     // Workers should continue working if there is still some work to do
     // even after the call to Stop (however, no Push calls can be executed after calling Stop).
     // Only after all work is done, workers will receive stop signal.
-    std::tuple<bool, std::function<void()>> Wait();
+    std::tuple<bool, std::function<void()>> Wait(size_t id);
 
     // Calling stop will signal to the work pipe that it should not allow
     // enqueueing any new tasks. The call will block until all tasks that
@@ -39,6 +40,7 @@ class WorkPipe {
     std::queue<std::function<void()>> m_global_workqueue;
     std::mutex m_global_workqueue_mutex;
     bool m_stopped; // it also protected by m_global_workqueue
+    LoggerType m_logger;
 };
 
 // Worker is the owner of a thread and executes tasks from WorkPipe

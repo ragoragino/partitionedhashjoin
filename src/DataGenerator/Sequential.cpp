@@ -20,7 +20,7 @@ std::future<void> Sequential::FillTable(std::shared_ptr<Common::IThreadPool> thr
     auto fillBatch = [&table](size_t tableStart, size_t tableEnd, int64_t indexStart) {
         for (size_t i = tableStart; i != tableEnd; i++) {
             (*table)[i].id = indexStart++;
-            (*table)[i].payload = 0;  // TODO
+            (*table)[i].payload = i;  // TODO
         }
     };
 

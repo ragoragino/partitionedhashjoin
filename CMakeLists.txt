@@ -11,6 +11,7 @@ enable_testing()
 find_package(Boost 1.72.0 COMPONENTS program_options log REQUIRED)
 find_package(GTest 1.11.0 REQUIRED)
 find_package(xxhash_cpp REQUIRED)
+find_package(mimalloc 1.4 REQUIRED)
 
 add_subdirectory(src)
 add_subdirectory(tests)

@@ -2,12 +2,12 @@
 
 #include "Common/Table.hpp"
 #include "Common/XXHasher.hpp"
-#include "NoPartitioningHashJoin/HashTable.hpp"
+#include "NoPartitioning/HashTable.hpp"
 #include "gtest/gtest.h"
 
 TEST(HashTableTest, InsertGetAndExists) {
     std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<NoPartioniningHashJoin::HashTable<Common::Tuple>>(hasher, 10);
+    auto hashTable = std::make_shared<NoPartitioning::HashTable<Common::Tuple>>(hasher, 10);
 
     Common::Tuple tuple{
         123456789,  // id
@@ -20,15 +20,14 @@ TEST(HashTableTest, InsertGetAndExists) {
 
     EXPECT_TRUE(hashKeyExists);
 
-    Common::Tuple* hashValue = hashTable->Get(tuple.id);
+    const Common::Tuple* hashValue = hashTable->Get(tuple.id);
 
     EXPECT_EQ(&tuple, hashValue);
 }
 
 TEST(HashTableTest, TestMultiThreadedInsert) {
     std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable =
-        std::make_shared<NoPartioniningHashJoin::HashTable<Common::Tuple>>(hasher, 100000);
+    auto hashTable = std::make_shared<NoPartitioning::HashTable<Common::Tuple>>(hasher, 100000);
 
     Common::Tuple tuple{
         123456789,  // id
@@ -42,14 +41,18 @@ TEST(HashTableTest, TestMultiThreadedInsert) {
     };
 
     int start = 0;
-    int workerRange = 10000;
-    int nOfWorkers = 10;
-    int end = start + nOfWorkers * workerRange;
+    int end = 1000000;
+    int nOfWorkers = 4;
+    int range = (end - start) / nOfWorkers;
 
     std::vector<std::thread> threads{};
     for (int i = 0; i != nOfWorkers; i++) {
-        threads.emplace_back(hashTableInserterFunc, start + i * workerRange,
-                             start + (i + 1) * workerRange);
+        int endRange = start + (i + 1) * range;
+        if (i == (nOfWorkers - 1)) {
+            endRange = end;
+        }
+
+        threads.emplace_back(hashTableInserterFunc, start + i * range, endRange);
     }
 
     for (auto&& thread : threads) {

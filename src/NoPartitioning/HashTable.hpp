@@ -10,21 +10,20 @@
 #include "Common/Table.hpp"
 #include "Common/XXHasher.hpp"
 
-namespace NoPartioniningHashJoin {
+namespace NoPartitioning {
 namespace internal {
 template <typename Value, size_t N = 3>
 class alignas(64) Bucket {
    public:
-    explicit Bucket(Bucket<Value, N>* oldBucket)
-        : m_nextBucket(oldBucket), m_freePosition(0) {}
+    explicit Bucket(Bucket<Value, N>* oldBucket) : m_nextBucket(oldBucket), m_freePosition(0) {}
 
-    Bucket(Bucket<Value, N>* oldBucket, int64_t key, Value* tuple)
+    Bucket(Bucket<Value, N>* oldBucket, int64_t key, const Value * tuple)
         : m_nextBucket(oldBucket), m_freePosition(1) {
         m_keys[0] = key;
         m_values[0] = tuple;
     }
 
-    bool Insert(int64_t key, Value* tuple) {
+    bool Insert(int64_t key, const Value* tuple) {
         if (m_freePosition == N) {
             return false;
         }
@@ -49,7 +48,7 @@ class alignas(64) Bucket {
         return false;
     }
 
-    Value* Get(int64_t key) {
+    const Value* Get(int64_t key) {
         size_t end = m_freePosition;
 
         for (size_t i = 0; i != end; i++) {
@@ -67,7 +66,7 @@ class alignas(64) Bucket {
     Bucket<Value, N>* m_nextBucket;
     int8_t m_freePosition;
     int64_t m_keys[N];
-    Value* m_values[N];
+    const Value* m_values[N];
 };
 }  // namespace internal
 
@@ -84,7 +83,7 @@ class HashTable {
     }
 
     // thread-safe
-    void Insert(int64_t key, BucketValueType* tuple) {
+    void Insert(int64_t key, const BucketValueType* tuple) {
         // get hash key
         uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
 
@@ -96,10 +95,10 @@ class HashTable {
             // TODO: optimize memory allocation - Fucking jemalloc and tcmalloc are broken on
             // Windows
             m_bucketPtrs[hash] =
-                new internal::Bucket<BucketValueType, m_bucketSize>(nullptr, key, tuple);
+               new internal::Bucket<BucketValueType, m_bucketSize>(nullptr, key, tuple);
         } else {
             bool insertSucceeded = m_bucketPtrs[hash]->Insert(key, tuple);
-            if (insertSucceeded) {
+            if (!insertSucceeded) { 
                 // TODO: optimize memory allocation - Fucking jemalloc and tcmalloc are broken on
                 // Windows
                 internal::Bucket<BucketValueType, m_bucketSize>* bucket =
@@ -135,7 +134,7 @@ class HashTable {
     }
 
     // not thread-safe - we shouldn't need to run Get during building of hash index
-    Common::Tuple* Get(int64_t key) {
+    const Common::Tuple* Get(int64_t key) {
         // get hash key
         uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
 
@@ -145,7 +144,7 @@ class HashTable {
 
         internal::Bucket<BucketValueType, m_bucketSize>* bucketPtr = m_bucketPtrs[hash];
         while (bucketPtr != nullptr) {
-            Common::Tuple* tuple = bucketPtr->Get(key);
+            const Common::Tuple* tuple = bucketPtr->Get(key);
             if (tuple != nullptr) {
                 return tuple;
             }
@@ -156,7 +155,17 @@ class HashTable {
         return false;
     }
 
-    ~HashTable() = default;
+    ~HashTable() {
+        std::for_each(m_bucketPtrs.begin(), m_bucketPtrs.end(),
+            [](internal::Bucket<BucketValueType, m_bucketSize>* bucket) {
+                while (bucket != nullptr) {
+                    internal::Bucket<BucketValueType, m_bucketSize>* newBucket =
+                        bucket->Next();
+                    delete bucket;
+                    bucket = newBucket;
+                }
+            });
+    };
 
    private:
     static constexpr size_t m_bucketSize = 3;
@@ -166,4 +175,4 @@ class HashTable {
         m_bucketPtrsLatches;  // TODO: Maybe merge latches with buckets themselves?
     std::shared_ptr<Common::IHasher> m_hasher;
 };
-}  // namespace NoPartioniningHashJoin
+}  // namespace NoPartitioning

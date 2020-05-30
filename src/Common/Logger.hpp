@@ -3,12 +3,12 @@
 #include <boost/log/sources/record_ostream.hpp>
 #include <boost/log/sources/severity_feature.hpp>
 #include <boost/log/sources/severity_logger.hpp>
+#include <string>
 
 namespace Common {
-// TODO: Logger should be an interface, to allow changing it in the future,
-// in case we find out that current implementation is unsatisfactory
-
 enum SeverityLevel { trace, debug, info, error, critical };
+
+typedef boost::log::sources::severity_logger<SeverityLevel> LoggerType;
 
 struct LoggerConfiguration {
     SeverityLevel severity_level;
@@ -16,5 +16,9 @@ struct LoggerConfiguration {
 
 void InitializeLogger(const LoggerConfiguration& configuration);
 
-boost::log::sources::severity_logger<SeverityLevel> GetNewLogger();
+LoggerType GetNewLogger();
+
+void AddComponentAttributeToLogger(LoggerType& logger, std::string componentName);
+
+#define LOG(lg, sev) BOOST_LOG_SEV(lg, sev)
 }  // namespace Common
