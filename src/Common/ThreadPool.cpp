@@ -11,11 +11,11 @@ ThreadPool::ThreadPool(size_t numberOfWorkers)
                   [this](internal::Worker& worker) { worker.Start(this->m_workPipe); });
 }
 
-std::future<void> ThreadPool::Push(std::function<void()>&& f) {
+std::future<std::vector<std::string>> ThreadPool::Push(std::function<void()>&& f) {
     return m_workPipe->Push(std::move(f));
 }
 
-std::future<void> ThreadPool::Push(std::vector<std::function<void()>>&& f) {
+std::future<std::vector<std::string>> ThreadPool::Push(std::vector<std::function<void()>>&& f) {
     return m_workPipe->Push(std::move(f));
 }
 
@@ -45,7 +45,14 @@ std::vector<std::function<void()>> WorkManager::GetTasks() {
     for (auto&& func : m_work) {
         tasks.push_back(
             std::function<void()>([f = std::move(func), workManager = shared_from_this()]() {
-                f();
+                try {
+                    f();
+                } catch (std::exception& e) {
+                    workManager->m_exceptionsMutex.lock();
+                    workManager->m_exceptions.push_back(e.what());                       
+                    workManager->m_exceptionsMutex.unlock();
+                }; 
+                
                 workManager->finished();
             }));
     }
@@ -55,17 +62,17 @@ std::vector<std::function<void()>> WorkManager::GetTasks() {
     return tasks;
 }
 
-std::future<void> WorkManager::GetFuture() { return m_promise.get_future(); }
+std::future<std::vector<std::string>> WorkManager::GetFuture() { return m_promise.get_future(); }
 
 void WorkManager::finished() {
     if (m_counter.fetch_sub(1) == 1) {
-        m_promise.set_value();
+        m_promise.set_value(m_exceptions);
     }
 }
 
 WorkPipe::WorkPipe() : m_stopped(false) {}
 
-std::future<void> WorkPipe::Push(std::function<void()>&& f) {
+std::future<std::vector<std::string>> WorkPipe::Push(std::function<void()>&& f) {
     std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
 
     if (m_stopped) {
@@ -86,7 +93,7 @@ std::future<void> WorkPipe::Push(std::function<void()>&& f) {
     return workManager->GetFuture();
 }
 
-std::future<void> WorkPipe::Push(std::vector<std::function<void()>>&& f) {
+std::future<std::vector<std::string>> WorkPipe::Push(std::vector<std::function<void()>>&& f) {
     std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
 
     if (m_stopped) {

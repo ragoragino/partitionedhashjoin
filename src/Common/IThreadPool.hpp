@@ -8,9 +8,9 @@
 namespace Common {
 class IThreadPool {
    public:
-    virtual std::future<void> Push(std::function<void()>&& f) = 0;
+    virtual std::future<std::vector<std::string>> Push(std::function<void()>&& f) = 0;
 
-    virtual std::future<void> Push(std::vector<std::function<void()>>&& f) = 0;
+    virtual std::future<std::vector<std::string>> Push(std::vector<std::function<void()>>&& f) = 0;
 
     virtual size_t GetNumberOfWorkers() const = 0;
 

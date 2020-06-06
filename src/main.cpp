@@ -1,31 +1,30 @@
+#include <mimalloc.h>
+
 #include <cstdint>
+#include <fstream>
 #include <future>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <thread>
 
-#include <fstream>
-#include <iostream>
-
+#include "Common/Configuration.hpp"
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
 #include "Common/Random.hpp"
 #include "Common/Table.hpp"
-#include "Common/Configuration.hpp"
 #include "Common/ThreadPool.hpp"
 #include "DataGenerator/Sequential.hpp"
 #include "DataGenerator/Zipf.hpp"
 #include "NoPartitioning/HashJoin.hpp"
 
-#include <mimalloc.h>
-
 int main(int argc, char** argv) {
     mi_version();  // ensure mimalloc library is linked
 
     Common::Configuration configuration{NoPartitioning::Configuration{
-        10000, // MIN_BATCH_SIZE
-        0.75, // HASH_TABLE_SIZE_RATIO
-        1'000'000'000, // HASH_TABLE_SIZE_LIMIT
+        10000,          // MIN_BATCH_SIZE
+        0.75,           // HASH_TABLE_SIZE_RATIO
+        1'000'000'000,  // HASH_TABLE_SIZE_LIMIT
     }};
 
     Common::LoggerConfiguration logger_configuration{};
@@ -37,10 +36,7 @@ int main(int argc, char** argv) {
     Common::AddComponentAttributeToLogger(logger, "main");
 
     uint64_t primaryKeyRelationSize = 16'000'000;
-    uint64_t secondaryKeyRelationSize = 256'000'000;
-
-    std::string primaryFilename = "primary_relation.txt";
-    std::string secondaryFilename = "secondary_relation.txt";
+    uint64_t secondaryKeyRelationSize = 25'600'000;
 
     LOG(logger, Common::SeverityLevel::info)
         << "Generating primary relation with size " << primaryKeyRelationSize << " and "
@@ -58,18 +54,20 @@ int main(int argc, char** argv) {
     auto randomNumberGeneratorFactory =
         std::make_shared<Common::MultiplicativeLCGRandomNumberGeneratorFactory>();
 
-    std::shared_ptr<Common::Table> primaryKeyRelation =
-        std::make_shared<Common::Table>(primaryKeyRelationSize);
-    std::shared_ptr<Common::Table> secondaryKeyRelation =
-        std::make_shared<Common::Table>(secondaryKeyRelationSize);
+    auto primaryKeyRelation =
+        std::make_shared<Common::Table<Common::Tuple>>(primaryKeyRelationSize);
+    auto secondaryKeyRelation =
+        std::make_shared<Common::Table<Common::Tuple>>(secondaryKeyRelationSize);
 
     int64_t startIndex = 1;
     int64_t endIndex = startIndex + primaryKeyRelationSize - 1;
 
-    std::future<void> generatePrimaryKeyRelationFuture = DataGenerator::Sequential::FillTable(
+    std::future<std::vector<std::string>> generatePrimaryKeyRelationFuture =
+        DataGenerator::Sequential::FillTable(
         threadPool, primaryKeyRelation, DataGenerator::Sequential::Parameters{startIndex});
 
-    std::future<void> generateSecondaryKeyRelationFuture = DataGenerator::Zipf::FillTable(
+    std::future<std::vector<std::string>> generateSecondaryKeyRelationFuture =
+        DataGenerator::Zipf::FillTable(
         threadPool, secondaryKeyRelation,
         DataGenerator::Zipf::Parameters{1.0, std::make_pair(startIndex, endIndex),
                                         randomNumberGeneratorFactory});
@@ -77,15 +75,31 @@ int main(int argc, char** argv) {
     generatePrimaryKeyRelationFuture.wait();
     generateSecondaryKeyRelationFuture.wait();
 
+    if (generatePrimaryKeyRelationFuture.get().size() != 0) {
+        std::string concatErrors;
+        for (const std::string& error : generatePrimaryKeyRelationFuture.get()) {
+            concatErrors += error + "; ";
+        }
+        throw std::runtime_error(concatErrors);
+    }
+
+    if (generateSecondaryKeyRelationFuture.get().size() != 0) {
+        std::string concatErrors;
+        for (const std::string& error : generateSecondaryKeyRelationFuture.get()) {
+            concatErrors += error + "; ";
+        }
+        throw std::runtime_error(concatErrors);
+    }
+
     LOG(logger, Common::SeverityLevel::info) << "Generating finished.";
 
     LOG(logger, Common::SeverityLevel::info) << "Executing NoPartitionHashJoin algorithm.";
 
-    NoPartitioning::HashJoiner noPartitioningHashJoiner(configuration.NoPartitioningConfiguration, threadPool);
+    NoPartitioning::HashJoiner noPartitioningHashJoiner(configuration.NoPartitioningConfiguration,
+                                                        threadPool);
 
-    noPartitioningHashJoiner.Run(primaryKeyRelation, secondaryKeyRelation);
-
-    LOG(logger, Common::SeverityLevel::info) << "Running NoPartitionHashJoin finished.";
+    std::shared_ptr<Common::Table<Common::JoinedTuple>> outputTuple = 
+        noPartitioningHashJoiner.Run(primaryKeyRelation, secondaryKeyRelation);
 
     threadPool->Stop();
 

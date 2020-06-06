@@ -63,8 +63,9 @@ uint64_t Zipf::generate(double alpha, uint64_t cardinality,
     }
 }
 
-std::future<void> Zipf::FillTable(std::shared_ptr<Common::IThreadPool> threadPool,
-                                 std::shared_ptr<Common::Table> table,
+std::future<std::vector<std::string>> Zipf::FillTable(
+    std::shared_ptr<Common::IThreadPool> threadPool,
+                                  std::shared_ptr<Common::Table<Common::Tuple>> table,
                                  const Parameters& parameters) {
     if (parameters.range.first >= parameters.range.second) {
         std::ostringstream errorMessage;

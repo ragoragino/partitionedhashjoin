@@ -2,12 +2,14 @@
 
 #include "Common/Table.hpp"
 #include "Common/XXHasher.hpp"
+#include "NoPartitioning/Configuration.hpp"
 #include "NoPartitioning/HashTable.hpp"
 #include "gtest/gtest.h"
 
 TEST(HashTableTest, InsertGetAndExists) {
     std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<NoPartitioning::HashTable<Common::Tuple>>(hasher, 10);
+    auto hashTable = std::make_shared<NoPartitioning::SeparateChainingHashTable<Common::Tuple, 3>>(
+        hasher, 10, 1);
 
     Common::Tuple tuple{
         123456789,  // id
@@ -25,9 +27,32 @@ TEST(HashTableTest, InsertGetAndExists) {
     EXPECT_EQ(&tuple, hashValue);
 }
 
+TEST(HashTableTest, Iterator) {
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    auto hashTable = std::make_shared<NoPartitioning::SeparateChainingHashTable<Common::Tuple, 3>>(
+        hasher, 1, 10);
+
+    int64_t id = 123456789;
+    std::vector<Common::Tuple> input_tuples(10);
+    for (size_t i = 0; i != input_tuples.size(); i++) {
+        input_tuples[i] = Common::Tuple{
+            id, 
+            static_cast<int64_t>(i), 
+        };  
+
+        hashTable->Insert(input_tuples[i].id, &input_tuples[i]);
+    }
+
+    std::vector<const Common::Tuple*> allTuples = hashTable->GetAll(id);
+
+    EXPECT_EQ(input_tuples.size(), allTuples.size());
+}
+
+
 TEST(HashTableTest, TestMultiThreadedInsert) {
     std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<NoPartitioning::HashTable<Common::Tuple>>(hasher, 100000);
+    auto hashTable = std::make_shared<NoPartitioning::SeparateChainingHashTable<Common::Tuple, 3>>(
+        hasher, 100, 1000);
 
     Common::Tuple tuple{
         123456789,  // id
@@ -41,7 +66,7 @@ TEST(HashTableTest, TestMultiThreadedInsert) {
     };
 
     int start = 0;
-    int end = 1000000;
+    int end = 1000;
     int nOfWorkers = 4;
     int range = (end - start) / nOfWorkers;
 

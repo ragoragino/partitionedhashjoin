@@ -3,9 +3,7 @@ Necessary requirements:
 
 Work in progress
 
-TODO (30.5.):
-- verify correctness of HashTable + optimize memory allocations and destructor
+TODO (6.6.):
 - add google benchmarking
 - write unit tests (e.g. ThreadPool)
-- start writing hash join logic:
-	- implement hash join algorithm
+- start with Radix Clustering algorithm implementation

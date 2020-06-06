@@ -19,9 +19,9 @@ class WorkPipe {
    public:
     WorkPipe();
 
-    std::future<void> Push(std::function<void()>&& f);
+    std::future<std::vector<std::string>> Push(std::function<void()>&& f);
 
-    std::future<void> Push(std::vector<std::function<void()>>&& f);
+    std::future<std::vector<std::string>> Push(std::vector<std::function<void()>>&& f);
 
     // Workers call this to wait for the signal whether to quit,
     // and if signal is negative, they receive a new task.
@@ -69,14 +69,17 @@ class WorkManager : public std::enable_shared_from_this<WorkManager> {
     std::vector<std::function<void()>> GetTasks();
 
     // Can be called only once, otherwise throws std::future_error
-    std::future<void> GetFuture();
+    std::future<std::vector<std::string>> GetFuture();
 
    private:
     void finished();
 
     std::atomic_size_t m_counter;
-    std::promise<void> m_promise;
+    std::promise<std::vector<std::string>> m_promise;
     std::vector<std::function<void()>> m_work;
+
+    std::vector<std::string> m_exceptions;
+    std::mutex m_exceptionsMutex;
 };
 }  // namespace internal
 
@@ -84,9 +87,10 @@ class ThreadPool : public IThreadPool {
    public:
     ThreadPool(size_t numberOfWorkers);
 
-    virtual std::future<void> Push(std::function<void()>&& f) override;
+    virtual std::future<std::vector<std::string>> Push(std::function<void()>&& f) override;
 
-    virtual std::future<void> Push(std::vector<std::function<void()>>&& f) override;
+    virtual std::future<std::vector<std::string>> Push(
+        std::vector<std::function<void()>>&& f) override;
 
     virtual size_t GetNumberOfWorkers() const override;
 

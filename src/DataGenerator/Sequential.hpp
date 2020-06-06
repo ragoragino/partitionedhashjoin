@@ -14,8 +14,9 @@ class Sequential {
         const int64_t start;
     };
 
-    static std::future<void> FillTable(std::shared_ptr<Common::IThreadPool> threadPool,
-                                      std::shared_ptr<Common::Table> table,
+    static std::future<std::vector<std::string>> FillTable(
+        std::shared_ptr<Common::IThreadPool> threadPool,
+                                      std::shared_ptr<Common::Table<Common::Tuple>> table,
                                       const Parameters& parameters);
 };
 };  // namespace DataGenerator

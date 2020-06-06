@@ -5,8 +5,9 @@
 #endif
 
 namespace DataGenerator {
-std::future<void> Sequential::FillTable(std::shared_ptr<Common::IThreadPool> threadPool,
-                                       std::shared_ptr<Common::Table> table,
+std::future<std::vector<std::string>> Sequential::FillTable(
+    std::shared_ptr<Common::IThreadPool> threadPool,
+                                        std::shared_ptr<Common::Table<Common::Tuple>> table,
                                        const Parameters& parameters) {
     const size_t size = table->GetSize();
     size_t numberOfWorkers = threadPool->GetNumberOfWorkers();
