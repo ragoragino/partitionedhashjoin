@@ -1,6 +1,6 @@
 #include "HashJoin.hpp"
 
-#include "HashTable.hpp"
+#include "HashTables/SeparateChaining.hpp"
 
 namespace NoPartitioning {
 HashJoiner::HashJoiner(Configuration configuration, std::shared_ptr<Common::IThreadPool> threadPool)
@@ -20,21 +20,18 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner::Run(
     return this->Probe(hashTable, tableB, numberOfWorkers);
 }
 
-std::shared_ptr<SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>> HashJoiner::Build(
+std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>
+HashJoiner::Build(
     std::shared_ptr<Common::Table<Common::Tuple>> tableA, size_t numberOfWorkers) {
     const size_t tableASize = tableA->GetSize();
     double expectedHashTableSize =
         static_cast<double>(tableASize) / m_configuration.HASH_TABLE_SIZE_RATIO;
 
-    if (expectedHashTableSize > m_configuration.HASH_TABLE_SIZE_LIMIT) {
-        expectedHashTableSize = m_configuration.HASH_TABLE_SIZE_LIMIT;
-    }
-
     size_t hashTableSize = expectedHashTableSize / static_cast<double>(HASH_TABLE_BUCKET_SIZE);
 
     std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable =
-        std::make_shared<SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>(
+    auto hashTable = std::make_shared<
+        HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>(
             hasher, hashTableSize, tableASize);
 
     size_t batchSize = static_cast<size_t>(tableASize / numberOfWorkers);
@@ -65,24 +62,21 @@ std::shared_ptr<SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>
 
     LOG(m_logger, Common::debug) << "Starting build phase.";
 
-    std::future<std::vector<std::string>> createHashTableFuture =
+    std::future<Common::TasksErrorHolder> createHashTableFuture =
         m_threadPool->Push(std::move(tasks));
 
     createHashTableFuture.wait();
 
-    if (createHashTableFuture.get().size() != 0) {
-        std::string concatErrors;
-        for (const std::string& error : createHashTableFuture.get()) {
-            concatErrors += error + "; ";
-        }
-        throw std::runtime_error(concatErrors);
+    if (!createHashTableFuture.get().Empty()) {
+        throw createHashTableFuture.get().Pop();
     }
 
     return hashTable;
 }
 
 std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner::Probe(
-    std::shared_ptr<SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>> hashTable,
+    std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>
+        hashTable,
     std::shared_ptr<Common::Table<Common::Tuple>> tableB, size_t numberOfWorkers) {
     const size_t tableBSize = tableB->GetSize();
 
@@ -123,17 +117,13 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner::Probe(
 
     LOG(m_logger, Common::debug) << "Starting probe phase.";
 
-    std::future<std::vector<std::string>> probeHashTableFuture =
+    std::future<Common::TasksErrorHolder> probeHashTableFuture =
         m_threadPool->Push(std::move(tasks));
 
     probeHashTableFuture.wait();
 
-    if (probeHashTableFuture.get().size() != 0) {
-        std::string concatErrors;
-        for (const std::string& error : probeHashTableFuture.get()) {
-            concatErrors += error + "; ";
-        }
-        throw std::runtime_error(concatErrors);
+    if (!probeHashTableFuture.get().Empty()) {
+        throw probeHashTableFuture.get().Pop();
     }
         
     LOG(m_logger, Common::debug) << "Joined " << globalCounter.load() << " tuples.";

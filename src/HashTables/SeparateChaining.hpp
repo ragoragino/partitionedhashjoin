@@ -10,10 +10,10 @@
 #include "Common/IHasher.hpp"
 #include "Common/Table.hpp"
 #include "Common/XXHasher.hpp"
-#include "Configuration.hpp"
 
-namespace NoPartitioning {
+namespace HashTables {
 namespace internal {
+namespace SeparateChaining {
 template <typename Value, size_t N>
 class alignas(64) Bucket {
    public:
@@ -38,7 +38,7 @@ class alignas(64) Bucket {
         return true;
     }
 
-    bool Exists(int64_t key) {
+    bool Exists(int64_t key) const {
         size_t end = m_freePosition;
 
         for (size_t i = 0; i != end; i++) {
@@ -50,7 +50,7 @@ class alignas(64) Bucket {
         return false;
     }
 
-    const Value* Get(int64_t key) {
+    const Value* Get(int64_t key) const {
         size_t end = m_freePosition;
 
         for (size_t i = 0; i != end; i++) {
@@ -64,13 +64,13 @@ class alignas(64) Bucket {
 
     void SetNext(Bucket<Value, N>* nextBucket) { m_nextBucket = nextBucket; };
 
-    Bucket<Value, N>* Next() { return m_nextBucket; }
+    Bucket<Value, N>* Next() const { return m_nextBucket; }
 
-    std::vector<const Value*> GetAll(int64_t key) {
+    std::vector<const Value*> GetAll(int64_t key) const {
         std::vector<const Value*> result{};
 
         size_t currentPosition = 0;
-        Bucket<Value, N>* currenBucket = this;
+        const Bucket<Value, N>* currenBucket = this;
         while (currenBucket != nullptr) {
             if (currentPosition == currenBucket->m_freePosition) {
                 currenBucket = currenBucket->Next();
@@ -129,18 +129,22 @@ class BucketAllocator {
     std::atomic<size_t> m_currentIndex;
 };
 
+}  // namespace SeparateChaining
 }  // namespace internal
 
 template <typename BucketValueType, size_t BucketSize>
 class SeparateChainingHashTable {
+    using Bucket = internal::SeparateChaining::Bucket<BucketValueType, BucketSize>;
+    using BucketAllocator = internal::SeparateChaining::BucketAllocator<Bucket>;
+
    public:
     SeparateChainingHashTable(std::shared_ptr<Common::IHasher> hasher, size_t numberOfBuckets,
                               size_t numberOfObjects)
         : m_hasher(hasher),
           m_numberOfBuckets(numberOfBuckets),
           m_bucketPtrs(numberOfBuckets),
-          m_firstBuckets(numberOfBuckets, internal::Bucket<BucketValueType, BucketSize>(
-                                              nullptr)),  // TODO: Maybe use only bucket allocator
+          m_firstBuckets(numberOfBuckets,
+                         Bucket(nullptr)),  // TODO: Maybe use only bucket allocator
           m_bucketPtrsLatches(numberOfBuckets) {
         std::for_each(m_bucketPtrsLatches.begin(), m_bucketPtrsLatches.end(),
                       [](std::atomic_flag& latch) { latch.clear(); });
@@ -151,19 +155,16 @@ class SeparateChainingHashTable {
             throw std::invalid_argument("numberOfObjects must be greater than zero.");
         }
 
-        double bucketAllocatorBufferSize =
-            static_cast<double>(numberOfObjects) / static_cast<double>(BucketSize);
+        size_t bucketAllocatorBufferSize =
+            static_cast<size_t>(ceil(static_cast<double>(numberOfObjects) / static_cast<double>(BucketSize)));
 
         if (bucketAllocatorBufferSize > 1) {
-            m_bucketAllocator =
-                internal::BucketAllocator<internal::Bucket<BucketValueType, BucketSize>>(
-                    ceil(bucketAllocatorBufferSize), nullptr);
+            m_bucketAllocator = BucketAllocator(bucketAllocatorBufferSize, nullptr);
         }
     }
 
     // thread-safe
     void Insert(int64_t key, const BucketValueType* tuple) {
-        // get hash key
         uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
 
         // Spin on latch until you succeed in locking it
@@ -186,7 +187,8 @@ class SeparateChainingHashTable {
 
             // In case insert failed, get new bucket from bucker allocator
             if (!insertSucceeded) {
-                internal::Bucket<BucketValueType, BucketSize>* oldBucket = m_bucketPtrs[hash];
+                internal::SeparateChaining::Bucket<BucketValueType, BucketSize>* oldBucket =
+                    m_bucketPtrs[hash];
                 m_bucketPtrs[hash] = m_bucketAllocator.New();
                 m_bucketPtrs[hash]->SetNext(oldBucket);
                 insertSucceeded = m_bucketPtrs[hash]->Insert(key, tuple);
@@ -204,14 +206,13 @@ class SeparateChainingHashTable {
 
     // not thread-safe - we shouldn't need to run Exists during building of hash index
     bool Exists(int64_t key) {
-        // get hash key
         uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
 
         if (m_bucketPtrs[hash] == nullptr) {
             return false;
         }
 
-        internal::Bucket<BucketValueType, BucketSize>* bucketPtr = m_bucketPtrs[hash];
+        const Bucket* bucketPtr = m_bucketPtrs[hash];
         while (bucketPtr != nullptr) {
             if (bucketPtr->Exists(key)) {
                 return true;
@@ -224,17 +225,16 @@ class SeparateChainingHashTable {
     }
 
     // not thread-safe - we shouldn't need to run Get during building of hash index
-    const Common::Tuple* Get(int64_t key) {
-        // get hash key
+    const BucketValueType* Get(int64_t key) {
         uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
 
         if (m_bucketPtrs[hash] == nullptr) {
             return false;
         }
 
-        internal::Bucket<BucketValueType, BucketSize>* bucketPtr = m_bucketPtrs[hash];
+        const Bucket* bucketPtr = m_bucketPtrs[hash];
         while (bucketPtr != nullptr) {
-            const Common::Tuple* tuple = bucketPtr->Get(key);
+            const BucketValueType* tuple = bucketPtr->Get(key);
             if (tuple != nullptr) {
                 return tuple;
             }
@@ -246,13 +246,11 @@ class SeparateChainingHashTable {
     }
 
     // not thread-safe - we shouldn't need to run GetAll during building of hash index
-    std::vector<const Common::Tuple*> GetAll(int64_t key) {
-        // get hash key
+    std::vector<const BucketValueType*> GetAll(int64_t key) {
         uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
 
-        std::vector<const Common::Tuple*> tuples;
         if (m_bucketPtrs[hash] == nullptr) {
-            return tuples;
+            return std::vector<const BucketValueType*>{};
         }
 
         return m_bucketPtrs[hash]->GetAll(key);
@@ -262,10 +260,10 @@ class SeparateChainingHashTable {
 
    private:
     const size_t m_numberOfBuckets;
-    std::vector<internal::Bucket<BucketValueType, BucketSize>*> m_bucketPtrs;
+    std::vector<Bucket*> m_bucketPtrs;
     std::vector<std::atomic_flag> m_bucketPtrsLatches;
-    std::vector<internal::Bucket<BucketValueType, BucketSize>> m_firstBuckets;
+    std::vector<Bucket> m_firstBuckets;
     std::shared_ptr<Common::IHasher> m_hasher;
-    internal::BucketAllocator<internal::Bucket<BucketValueType, BucketSize>> m_bucketAllocator;
+    BucketAllocator m_bucketAllocator;
 };
-}  // namespace NoPartitioning
+}  // namespace HashTables

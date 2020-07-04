@@ -18,7 +18,7 @@ class Zipf {
         std::shared_ptr<Common::IRandomNumberGeneratorFactory> generatorFactory;
     };
 
-    static std::future<std::vector<std::string>> FillTable(
+    static std::future<Common::TasksErrorHolder> FillTable(
         std::shared_ptr<Common::IThreadPool> threadPool,
                                        std::shared_ptr<Common::Table<Common::Tuple>> table,
                                        const Parameters& parameters);

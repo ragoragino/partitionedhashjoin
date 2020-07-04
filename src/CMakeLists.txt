@@ -3,10 +3,12 @@ add_library(phjoinlib STATIC
 	"Common/Table.cpp" 
 	"Common/ThreadPool.cpp" 
 	"Common/Random.cpp"
+	"Common/Allocator.cpp" 
+	"Common/IThreadPool.cpp" 
 	"DataGenerator/Zipf.cpp" 
 	"DataGenerator/Sequential.cpp"
-	"Common/Allocator.cpp" 
-	"NoPartitioning/HashJoin.cpp")
+	"NoPartitioning/HashJoin.cpp" 
+	"RadixCluster/HashJoin.cpp")
 
 target_compile_features(phjoinlib PUBLIC cxx_std_17)
 target_include_directories(phjoinlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

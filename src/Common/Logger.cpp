@@ -64,7 +64,7 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
             boost::log::expressions::stream
             << "(" << component << ") "
             << "(" << severity << ") "
-            << "(" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S") << ") "
+            << "(" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S.%f") << ") "
             << ": " << boost::log::expressions::smessage);
 
         boost::log::core::get()->add_sink(default_log_owner->sink);

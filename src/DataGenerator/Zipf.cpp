@@ -63,7 +63,7 @@ uint64_t Zipf::generate(double alpha, uint64_t cardinality,
     }
 }
 
-std::future<std::vector<std::string>> Zipf::FillTable(
+std::future<Common::TasksErrorHolder> Zipf::FillTable(
     std::shared_ptr<Common::IThreadPool> threadPool,
                                   std::shared_ptr<Common::Table<Common::Tuple>> table,
                                  const Parameters& parameters) {

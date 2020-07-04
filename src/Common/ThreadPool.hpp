@@ -2,26 +2,58 @@
 #include <atomic>
 #include <functional>
 #include <future>
+#include <map>
 #include <memory>
 #include <queue>
 #include <vector>
-#include <atomic>
 
 #include "IThreadPool.hpp"
 #include "Logger.hpp"
 
 namespace Common {
+class Pipeline : public IPipeline, public std::enable_shared_from_this<Pipeline> {
+   public:
+    Pipeline(std::shared_ptr<IThreadPool> threadPool);
+
+    virtual size_t Add(std::vector<std::function<void()>>&& f) override;
+
+    virtual std::vector<std::function<void()>> Next() override;
+
+    virtual std::future<TasksErrorHolder> Start() override;
+
+   private:
+    std::vector<std::function<void()>> next();
+
+    void finished(size_t id);
+
+    bool m_failed;
+    std::mutex m_mutex;
+    TasksErrorHolder m_exceptions;
+
+    size_t m_idCounter;
+    std::map<size_t, std::vector<std::function<void()>>> m_tasks;
+    std::map<size_t, std::size_t> m_counters;
+    std::promise<TasksErrorHolder> m_globalPromise;
+    size_t m_finishedBatches;
+
+    std::shared_ptr<IThreadPool> m_threadPool;
+
+    std::map<size_t, std::vector<std::function<void()>>>::iterator m_tasksIterator;
+};
 
 namespace internal {
+namespace ThreadPool {
 // WorkPipe is responsible for holding a queue of tasks
 // and pushing them to workers
 class WorkPipe {
    public:
     WorkPipe();
 
-    std::future<std::vector<std::string>> Push(std::function<void()>&& f);
+    std::future<TasksErrorHolder> Push(std::function<void()>&& f);
 
-    std::future<std::vector<std::string>> Push(std::vector<std::function<void()>>&& f);
+    std::future<TasksErrorHolder> Push(std::vector<std::function<void()>>&& f);
+
+    std::future<TasksErrorHolder> Push(std::shared_ptr<IPipeline> f);
 
     // Workers call this to wait for the signal whether to quit,
     // and if signal is negative, they receive a new task.
@@ -39,7 +71,7 @@ class WorkPipe {
     std::condition_variable m_condition_variable;
     std::queue<std::function<void()>> m_global_workqueue;
     std::mutex m_global_workqueue_mutex;
-    bool m_stopped; // it also protected by m_global_workqueue
+    bool m_stopped;  // it also protected by m_global_workqueue
 };
 
 // Worker is the owner of a thread and executes tasks from WorkPipe
@@ -69,28 +101,30 @@ class WorkManager : public std::enable_shared_from_this<WorkManager> {
     std::vector<std::function<void()>> GetTasks();
 
     // Can be called only once, otherwise throws std::future_error
-    std::future<std::vector<std::string>> GetFuture();
+    std::future<TasksErrorHolder> GetFuture();
 
    private:
     void finished();
 
     std::atomic_size_t m_counter;
-    std::promise<std::vector<std::string>> m_promise;
+    std::promise<TasksErrorHolder> m_promise;
     std::vector<std::function<void()>> m_work;
 
-    std::vector<std::string> m_exceptions;
+    TasksErrorHolder m_exceptions;
     std::mutex m_exceptionsMutex;
 };
+}  // namespace ThreadPool
 }  // namespace internal
 
 class ThreadPool : public IThreadPool {
    public:
     ThreadPool(size_t numberOfWorkers);
 
-    virtual std::future<std::vector<std::string>> Push(std::function<void()>&& f) override;
+    virtual std::future<TasksErrorHolder> Push(std::function<void()>&& f) override;
 
-    virtual std::future<std::vector<std::string>> Push(
-        std::vector<std::function<void()>>&& f) override;
+    virtual std::future<TasksErrorHolder> Push(std::vector<std::function<void()>>&& f) override;
+
+    virtual std::future<TasksErrorHolder> Push(std::shared_ptr<IPipeline> pipeline);
 
     virtual size_t GetNumberOfWorkers() const override;
 
@@ -99,7 +133,7 @@ class ThreadPool : public IThreadPool {
     virtual ~ThreadPool() override = default;
 
    private:
-    std::shared_ptr<internal::WorkPipe> m_workPipe;
-    std::vector<internal::Worker> m_workers;
+    std::shared_ptr<internal::ThreadPool::WorkPipe> m_workPipe;
+    std::vector<internal::ThreadPool::Worker> m_workers;
 };
 }  // namespace Common

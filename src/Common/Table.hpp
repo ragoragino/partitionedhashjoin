@@ -37,6 +37,9 @@ class Table {
     const TupleType &operator[](size_t index) const { return m_tuples[index]; }
 
     size_t GetSize() const { return m_tuples.size(); }
+
+    size_t GetCapacity() const { return m_tuples.capacity(); }
+
    private:
     // To minimize the posobility of false sharing in cache, we align the vector on
     // cache line size

@@ -4,7 +4,7 @@
 #include "Common/Logger.hpp"
 #include "Common/Table.hpp"
 #include "Configuration.hpp"
-#include "HashTable.hpp"
+#include "HashTables/SeparateChaining.hpp"
 
 #ifndef HASH_TABLE_BUCKET_SIZE
 #define HASH_TABLE_BUCKET_SIZE 3
@@ -21,11 +21,14 @@ class HashJoiner {
              std::shared_ptr<Common::Table<Common::Tuple>> tableB);
 
    private:
-    std::shared_ptr<SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>> Build(
+    std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>
+    Build(
         std::shared_ptr<Common::Table<Common::Tuple>> tableA, size_t numberOfWorkers);
 
     std::shared_ptr<Common::Table<Common::JoinedTuple>> Probe(
-        std::shared_ptr<SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>> hashTable,
+        std::shared_ptr<
+            HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>
+            hashTable,
         std::shared_ptr<Common::Table<Common::Tuple>> tableB, size_t numberOfWorkers);
 
     std::shared_ptr<Common::IThreadPool> m_threadPool;

@@ -5,7 +5,7 @@
 #endif
 
 namespace DataGenerator {
-std::future<std::vector<std::string>> Sequential::FillTable(
+std::future<Common::TasksErrorHolder> Sequential::FillTable(
     std::shared_ptr<Common::IThreadPool> threadPool,
                                         std::shared_ptr<Common::Table<Common::Tuple>> table,
                                        const Parameters& parameters) {

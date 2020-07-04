@@ -14,7 +14,7 @@ class Sequential {
         const int64_t start;
     };
 
-    static std::future<std::vector<std::string>> FillTable(
+    static std::future<Common::TasksErrorHolder> FillTable(
         std::shared_ptr<Common::IThreadPool> threadPool,
                                       std::shared_ptr<Common::Table<Common::Tuple>> table,
                                       const Parameters& parameters);

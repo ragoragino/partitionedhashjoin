@@ -1,78 +1,69 @@
 #include <map>
 
-#include "Common/Table.hpp"
-#include "Common/XXHasher.hpp"
-#include "NoPartitioning/Configuration.hpp"
-#include "NoPartitioning/HashTable.hpp"
+#include "../../src/Common/Table.hpp"
+#include "../../src/Common/XXHasher.hpp"
+#include "../../src/HashTables/LinearProbing.hpp"
+#include "../../src/HashTables/SeparateChaining.hpp"
+#include "../../src/NoPartitioning/Configuration.hpp"
 #include "gtest/gtest.h"
 
-TEST(HashTableTest, InsertGetAndExists) {
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<NoPartitioning::SeparateChainingHashTable<Common::Tuple, 3>>(
-        hasher, 10, 1);
-
+template <typename T>
+void testInsertGetAndExists(T&& hashTable) {
     Common::Tuple tuple{
         123456789,  // id
         987654321,  // payload
     };
 
-    hashTable->Insert(tuple.id, &tuple);
+    hashTable.Insert(tuple.id, &tuple);
 
-    bool hashKeyExists = hashTable->Exists(tuple.id);
+    bool hashKeyExists = hashTable.Exists(tuple.id);
 
     EXPECT_TRUE(hashKeyExists);
 
-    const Common::Tuple* hashValue = hashTable->Get(tuple.id);
+    const Common::Tuple* hashValue = hashTable.Get(tuple.id);
 
     EXPECT_EQ(&tuple, hashValue);
 }
 
-TEST(HashTableTest, Iterator) {
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<NoPartitioning::SeparateChainingHashTable<Common::Tuple, 3>>(
-        hasher, 1, 10);
-
+template <typename T>
+void testIterator(T&& hashTable, size_t numberOfTuples) {
     int64_t id = 123456789;
     std::vector<Common::Tuple> input_tuples(10);
     for (size_t i = 0; i != input_tuples.size(); i++) {
         input_tuples[i] = Common::Tuple{
-            id, 
-            static_cast<int64_t>(i), 
-        };  
+            id,
+            static_cast<int64_t>(i),
+        };
 
-        hashTable->Insert(input_tuples[i].id, &input_tuples[i]);
+        hashTable.Insert(input_tuples[i].id, &input_tuples[i]);
     }
 
-    std::vector<const Common::Tuple*> allTuples = hashTable->GetAll(id);
+    std::vector<const Common::Tuple*> allTuples = hashTable.GetAll(id);
 
     EXPECT_EQ(input_tuples.size(), allTuples.size());
 }
 
-
-TEST(HashTableTest, TestMultiThreadedInsert) {
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<NoPartitioning::SeparateChainingHashTable<Common::Tuple, 3>>(
-        hasher, 100, 1000);
-
+template <typename T>
+void testMultiThreaded(T&& hashTable, size_t numberOfTuples) {
     Common::Tuple tuple{
         123456789,  // id
         987654321,  // payload
     };
 
-    auto hashTableInserterFunc = [&hashTable, &tuple](int start, int end) {
-        for (int i = start; i != end; i++) {
+    auto hashTableInserterFunc = [&hashTable, &tuple](size_t start, size_t end) {
+        for (size_t i = start; i != end; i++) {
             hashTable->Insert(i, &tuple);
         }
     };
 
-    int start = 0;
-    int end = 1000;
-    int nOfWorkers = 4;
-    int range = (end - start) / nOfWorkers;
+    size_t start = 0;
+    size_t end = numberOfTuples;
+    size_t nOfWorkers = 4;
+    size_t range = (end - start) / nOfWorkers;
 
     std::vector<std::thread> threads{};
-    for (int i = 0; i != nOfWorkers; i++) {
-        int endRange = start + (i + 1) * range;
+    for (size_t i = 0; i != nOfWorkers; i++) {
+        size_t endRange = start + (i + 1) * range;
         if (i == (nOfWorkers - 1)) {
             endRange = end;
         }
@@ -84,8 +75,62 @@ TEST(HashTableTest, TestMultiThreadedInsert) {
         thread.join();
     }
 
-    for (int i = 0; i != end; i++) {
+    for (size_t i = 0; i != end; i++) {
         bool hashKeyExists = hashTable->Exists(i);
         EXPECT_TRUE(hashKeyExists);
     }
+}
+
+TEST(SeparateChainingTest, InsertGetAndExists) {
+    size_t nOfObjects = 10;
+    size_t nOfBuckets = 3;
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    HashTables::SeparateChainingHashTable<Common::Tuple, 3> hashTable(hasher, nOfBuckets,
+                                                                      nOfObjects);
+    testInsertGetAndExists(hashTable);
+}
+
+TEST(LinearProbingTest, InsertGetAndExists) {
+    size_t nOfObjects = 10;
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    HashTables::LinearProbingConfiguration config{/*.HASH_TABLE_SIZE_RATIO =*/1.0 / 0.75,
+                                                  /*.HASH_TABLE_SIZE_LIMIT =*/100};
+    HashTables::LinearProbingHashTable<Common::Tuple, 3> hashTable(config, hasher, nOfObjects);
+    testInsertGetAndExists(hashTable);
+}
+
+TEST(SeparateChainingTest, Iterator) {
+    size_t nOfObjects = 10;
+    size_t nOfBuckets = 3;
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    HashTables::SeparateChainingHashTable<Common::Tuple, 3> hashTable(hasher, nOfBuckets,
+                                                                      nOfObjects);
+    testIterator(hashTable, nOfObjects);
+}
+
+TEST(LinearProbingTest, Iterator) {
+    size_t nOfObjects = 10;
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    HashTables::LinearProbingConfiguration config{/*.HASH_TABLE_SIZE_RATIO =*/1.0 / 0.75,
+                                                  /*.HASH_TABLE_SIZE_LIMIT =*/100};
+    HashTables::LinearProbingHashTable<Common::Tuple, 3> hashTable(config, hasher, nOfObjects);
+    testIterator(hashTable, nOfObjects);
+}
+
+TEST(SeparateChainingTest, TestMultiThreadedInsert) {
+    size_t nOfObjects = 1000;
+    size_t nOfBuckets = 100;
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    auto hashTable = std::make_shared<HashTables::SeparateChainingHashTable<Common::Tuple, 3>>(
+        hasher, nOfBuckets, nOfObjects);
+    testMultiThreaded(hashTable, nOfObjects);
+}
+
+TEST(LinearProbingTest, TestMultiThreadedInsert) {
+    size_t nOfObjects = 1000;
+    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+    HashTables::LinearProbingConfiguration config{/*.HASH_TABLE_SIZE_RATIO =*/1.0 / 0.75,
+                                                  /*.HASH_TABLE_SIZE_LIMIT =*/100};
+    HashTables::LinearProbingHashTable<Common::Tuple, 3> hashTable(config, hasher, nOfObjects);
+    testIterator(hashTable, nOfObjects);
 }
