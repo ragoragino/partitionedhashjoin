@@ -12,6 +12,10 @@
 #include "Common/XXHasher.hpp"
 
 namespace HashTables {
+struct SeparateChainingConfiguration {
+    const double HASH_TABLE_SIZE_RATIO;
+};
+
 namespace internal {
 namespace SeparateChaining {
 template <typename Value, size_t N>
@@ -129,6 +133,9 @@ class BucketAllocator {
     std::atomic<size_t> m_currentIndex;
 };
 
+size_t getNumberOfBuckets(const SeparateChainingConfiguration& configuration,
+                          size_t numberOfObjects);
+
 }  // namespace SeparateChaining
 }  // namespace internal
 
@@ -138,25 +145,27 @@ class SeparateChainingHashTable {
     using BucketAllocator = internal::SeparateChaining::BucketAllocator<Bucket>;
 
    public:
-    SeparateChainingHashTable(std::shared_ptr<Common::IHasher> hasher, size_t numberOfBuckets,
-                              size_t numberOfObjects)
+    SeparateChainingHashTable(const SeparateChainingConfiguration& configuration,
+                              std::shared_ptr<Common::IHasher> hasher, size_t numberOfObjects)
         : m_hasher(hasher),
-          m_numberOfBuckets(numberOfBuckets),
-          m_bucketPtrs(numberOfBuckets),
-          m_firstBuckets(numberOfBuckets,
+          m_configuration(configuration),
+          m_numberOfBuckets(
+              internal::SeparateChaining::getNumberOfBuckets(configuration, numberOfObjects)),
+          m_bucketPtrs(m_numberOfBuckets),
+          m_firstBuckets(m_numberOfBuckets,
                          Bucket(nullptr)),  // TODO: Maybe use only bucket allocator
-          m_bucketPtrsLatches(numberOfBuckets) {
+          m_bucketPtrsLatches(m_numberOfBuckets) {
         std::for_each(m_bucketPtrsLatches.begin(), m_bucketPtrsLatches.end(),
                       [](std::atomic_flag& latch) { latch.clear(); });
 
-        if (numberOfBuckets <= 0) {
+        if (m_numberOfBuckets <= 0) {
             throw std::invalid_argument("numberOfBuckets must be greater than zero.");
         } else if (numberOfObjects <= 0) {
             throw std::invalid_argument("numberOfObjects must be greater than zero.");
         }
 
-        size_t bucketAllocatorBufferSize =
-            static_cast<size_t>(ceil(static_cast<double>(numberOfObjects) / static_cast<double>(BucketSize)));
+        size_t bucketAllocatorBufferSize = static_cast<size_t>(
+            ceil(static_cast<double>(numberOfObjects) / static_cast<double>(BucketSize)));
 
         if (bucketAllocatorBufferSize > 1) {
             m_bucketAllocator = BucketAllocator(bucketAllocatorBufferSize, nullptr);
@@ -265,5 +274,6 @@ class SeparateChainingHashTable {
     std::vector<Bucket> m_firstBuckets;
     std::shared_ptr<Common::IHasher> m_hasher;
     BucketAllocator m_bucketAllocator;
+    const SeparateChainingConfiguration m_configuration;
 };
 }  // namespace HashTables

@@ -22,13 +22,13 @@ void PrefixSumTable::Set(size_t hashIndex, size_t workerIndex, size_t value) {
 void PartitionsInfo::ComputePartitionsBoundaries(std::vector<size_t> partitionSizes) {
     m_partitionBorders.reserve(partitionSizes.size());
 
-    m_partitionBorders.push_back(0);
-    for (size_t i = 0; i != partitionSizes.size() - 1; i++) {
-        m_partitionBorders.push_back(partitionSizes[i]);
+    for (size_t i = 0; i != partitionSizes.size(); i++) {
+        size_t lastPartitionEnd = i == 0 ? 0 : m_partitionBorders.back().second;
+        m_partitionBorders.emplace_back(lastPartitionEnd, lastPartitionEnd + partitionSizes[i]);
     }
 }
 
-size_t PartitionsInfo::GetPartitionBoundary(size_t partition) {
+std::pair<size_t, size_t> PartitionsInfo::GetPartitionBoundaries(size_t partition) const {
     return m_partitionBorders[partition];
 }
 
@@ -63,13 +63,13 @@ HashJoiner::GetPartitioningConfiguration(std::shared_ptr<Common::Table<Common::T
     }
 
     internal::PartitioningConfiguration partitionConfigA{
-        10,               // NumberOfPartitions,
+        16,               // NumberOfPartitions,
         numberOfWorkers,  // NumberOfWorkers;
         batchSizeA,       // BatchSize
     };
 
     internal::PartitioningConfiguration partitionConfigB{
-        10,               // NumberOfPartitions,
+        16,               // NumberOfPartitions,
         numberOfWorkers,  // NumberOfWorkers;
         batchSizeB,       // BatchSize
     };
@@ -87,14 +87,13 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner::Run(
     const std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>
         partitionConfiguration = this->GetPartitioningConfiguration(tableA, tableB);
 
-    auto partitionInfo =
-        std::make_pair<internal::PartitionsInfo, internal::PartitionsInfo>(
-            internal::PartitionsInfo{}, internal::PartitionsInfo{});
+    auto partitionInfo = std::make_pair<internal::PartitionsInfo, internal::PartitionsInfo>(
+        internal::PartitionsInfo{}, internal::PartitionsInfo{});
 
-    auto partitionedTableAFuture =
-        this->Partition(tableA, partitionedTableA, partitionInfo.first, partitionConfiguration.first);
-    auto partitionedTableBFuture =
-        this->Partition(tableB, partitionedTableB, partitionInfo.second, partitionConfiguration.second);
+    auto partitionedTableAFuture = this->Partition(tableA, partitionedTableA, partitionInfo.first,
+                                                   partitionConfiguration.first);
+    auto partitionedTableBFuture = this->Partition(tableB, partitionedTableB, partitionInfo.second,
+                                                   partitionConfiguration.second);
 
     partitionedTableAFuture.wait();
     partitionedTableBFuture.wait();
@@ -107,7 +106,8 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner::Run(
 
     std::shared_ptr<Common::Table<Common::JoinedTuple>> joinedTable;
 
-    auto joinFuture = this->Join(joinedTable, partitionedTableA, partitionedTableB, partitionInfo, partitionConfiguration);
+    auto joinFuture = this->Join(joinedTable, partitionedTableA, partitionedTableB, partitionInfo,
+                                 partitionConfiguration);
 
     joinFuture.wait();
 
@@ -118,20 +118,54 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner::Run(
     return joinedTable;
 }
 
-// TODO
 std::future<Common::TasksErrorHolder> HashJoiner::Join(
     std::shared_ptr<Common::Table<Common::JoinedTuple>> joinedTable,
     std::shared_ptr<Common::Table<Common::Tuple>> partitionedTableA,
     std::shared_ptr<Common::Table<Common::Tuple>> partitionedTableB,
-    std::pair<internal::PartitionsInfo, internal::PartitionsInfo> partitionInfo,
-    std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>
-    partitionConfiguration) {
+    const std::pair<internal::PartitionsInfo, internal::PartitionsInfo>& partitionInfo,
+    const std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>&
+        partitionConfiguration) {
+    auto join = [this, joinedTable, partitionedTableA, partitionedTableB, &partitionConfiguration,
+                 &partitionInfo](size_t id) {
+        for (size_t partitionId = id; partitionId < partitionConfiguration.first.NumberOfPartitions;
+             partitionId += partitionConfiguration.first.NumberOfWorkers) {
+            HashTables::SeparateChainingConfiguration configuration{
+                0.1,  // HASH_TABLE_SIZE_RATIO
+            };
 
-    auto join = [](){};
-    std::vector<std::function<void()>> joinTasks{join};
+            auto hashTable = std::make_shared<
+                HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>(
+                configuration, m_hasher, partitionedTableA->GetSize());
+
+            auto [partitionStartA, partitionEndA] =
+                partitionInfo.first.GetPartitionBoundaries(partitionId);
+
+            // Build a hash table
+            for (size_t i = partitionStartA; i != partitionEndA; i++) {
+                const Common::Tuple& tuple = (*partitionedTableA)[i];
+                hashTable->Insert(tuple.id, &tuple);
+            }
+
+            auto [partitionStartB, partitionEndB] =
+                partitionInfo.second.GetPartitionBoundaries(partitionId);
+            
+            // Probe the hash table
+            for (size_t i = partitionStartB; i != partitionEndB; i++) {
+                const Common::Tuple& tuple = (*partitionedTableB)[i];
+                const Common::Tuple* tableATuple = hashTable->Get(tuple.id);
+                if (tableATuple != nullptr) {
+                }
+            }
+        }
+    };
+
+    std::vector<std::function<void()>> joinTasks{};
+    for (size_t i = 0; i != partitionConfiguration.first.NumberOfWorkers; ++i) {
+        joinTasks.push_back(std::bind(join, i));
+    }
 
     return m_threadPool->Push(std::move(joinTasks));
- }
+}
 
 std::future<Common::TasksErrorHolder> HashJoiner::Partition(
     std::shared_ptr<Common::Table<Common::Tuple>> table,
@@ -141,6 +175,7 @@ std::future<Common::TasksErrorHolder> HashJoiner::Partition(
     auto prefixSumTable = std::make_shared<internal::PrefixSumTable>(
         partitionConfiguration.NumberOfPartitions, partitionConfiguration.NumberOfWorkers);
 
+    // Define a task to create a temporary table containing sum of elements for each partition
     auto scanTable = [table, prefixSumTable, this, &partitionConfiguration](
                          size_t tableStart, size_t tableEnd, size_t workerID) {
         for (size_t i = tableStart; i != tableEnd; i++) {
@@ -149,11 +184,14 @@ std::future<Common::TasksErrorHolder> HashJoiner::Partition(
             prefixSumTable->Increment(partition, workerID);
         }
 
-        LOG(m_logger, Common::SeverityLevel::info) << "Worker " << workerID << " finished scanning.";
+        LOG(m_logger, Common::SeverityLevel::info)
+            << "Worker " << workerID << " finished scanning.";
     };
 
+    // Define a task to modify the temporary table to contain running totals of the partitions
     auto numberOfFinishedPartitions = std::make_shared<std::atomic<size_t>>(0);
-    auto partitionSizes = std::make_shared<std::vector<size_t>>(partitionConfiguration.NumberOfPartitions, 0);
+    auto partitionSizes =
+        std::make_shared<std::vector<size_t>>(partitionConfiguration.NumberOfPartitions, 0);
     auto createPrefixSumTable = [prefixSumTable, this, &partitionConfiguration, &partitionInfo,
                                  partitionSizes, numberOfFinishedPartitions](size_t partitionID) {
         size_t runningBucketSize, currentBucketSize;
@@ -175,16 +213,18 @@ std::future<Common::TasksErrorHolder> HashJoiner::Partition(
             partitionInfo.ComputePartitionsBoundaries(*partitionSizes);
         }
 
-        LOG(m_logger, Common::SeverityLevel::info) << "Worker " << partitionID << " finished creating prefix sum table.";
+        LOG(m_logger, Common::SeverityLevel::info)
+            << "Worker " << partitionID << " finished creating prefix sum table.";
     };
 
+    // Define a task to partition the original table so that its elements are organized per partition and thread
     auto partitionTable = [table, partitionedTable, prefixSumTable, this, &partitionConfiguration,
                            &partitionInfo](size_t tableStart, size_t tableEnd, size_t workerID) {
         for (size_t i = tableStart; i != tableEnd; i++) {
             uint32_t partition =
                 m_hasher->Hash((*table)[i].id, partitionConfiguration.NumberOfPartitions);
             size_t position = prefixSumTable->Get(partition, workerID);
-            size_t partitionStart = partitionInfo.GetPartitionBoundary(partition);
+            auto [partitionStart, partitionEnd] = partitionInfo.GetPartitionBoundaries(partition);
             (*partitionedTable)[partitionStart + position] = (*table)[i];
             prefixSumTable->Increment(partition, workerID);
         }

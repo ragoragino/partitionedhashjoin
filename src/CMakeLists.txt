@@ -7,6 +7,8 @@ add_library(phjoinlib STATIC
 	"Common/IThreadPool.cpp" 
 	"DataGenerator/Zipf.cpp" 
 	"DataGenerator/Sequential.cpp"
+	"HashTables/LinearProbing.cpp"
+	"HashTables/SeparateChaining.cpp"
 	"NoPartitioning/HashJoin.cpp" 
 	"RadixCluster/HashJoin.cpp")
 

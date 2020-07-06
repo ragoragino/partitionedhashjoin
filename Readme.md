@@ -3,9 +3,9 @@ Necessary requirements:
 
 Work in progress
 
-TODO (4.7.):
-- continue with Radix Clustering algorithm implementation
+TODO (6.7.):
+- make HashJoin parametrized on hash algoritms
+- create custom memory allocator for hash algorithms (memory can be reused)
 - write unit tests (e.g. ThreadPool)
 - add some benchmarks
-- investigate why is SeparateChaining significantly slower than LinearProbing
-- make HashJoin algorithms parametrized
+- investigate perf of SeparateChaining vs LinearProbing

@@ -29,11 +29,6 @@ class SeparateChainingFixture : public benchmark::Fixture {
         m_range = static_cast<size_t>(
             ceil(static_cast<double>(m_numberOfObjects) / static_cast<double>(state.threads)));
 
-        m_nOfBuckets = static_cast<double>(m_numberOfObjects) / 10.0;
-        if (m_nOfBuckets < 1) {
-            m_nOfBuckets = 1;
-        }
-
         m_hasher = std::make_shared<Common::XXHasher>();
 
         m_waiting.store(0);
@@ -57,9 +52,13 @@ class SeparateChainingFixture : public benchmark::Fixture {
             std::unique_lock<std::mutex> masterLock(m_mutex);
 
             m_finished.store(true);
+
+            HashTables::SeparateChainingConfiguration configuration{
+                0.1,  // HASH_TABLE_SIZE_RATIO
+            };
             
              m_hashTable = std::make_shared<HashTables::SeparateChainingHashTable<Common::Tuple, 3>>(
-                m_hasher, m_nOfBuckets, m_numberOfObjects);
+                configuration, m_hasher, m_numberOfObjects);
 
             m_cond.notify_all();
 
@@ -88,7 +87,7 @@ class SeparateChainingFixture : public benchmark::Fixture {
     }
 
    protected:
-    size_t m_start, m_end, m_range, m_nOfBuckets, m_numberOfObjects;
+    size_t m_start, m_end, m_range, m_numberOfObjects;
     std::shared_ptr<Common::XXHasher> m_hasher;
     std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, 3>> m_hashTable;
     Common::LoggerType m_logger;
@@ -150,7 +149,7 @@ class LinearProbingFixture : public benchmark::Fixture {
         m_hasher = std::make_shared<Common::XXHasher>();
 
         m_configuration = std::shared_ptr<HashTables::LinearProbingConfiguration>(
-            new HashTables::LinearProbingConfiguration{1.0 / 0.75, m_numberOfObjects});
+            new HashTables::LinearProbingConfiguration{1.0 / 0.75});
 
         m_waiting.store(0);
         m_finished.store(false);

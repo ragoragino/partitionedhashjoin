@@ -14,7 +14,6 @@
 namespace HashTables {
 struct LinearProbingConfiguration {
     const double HASH_TABLE_SIZE_RATIO;
-    const size_t HASH_TABLE_SIZE_LIMIT;
 };
 
 namespace internal {
@@ -86,17 +85,7 @@ class alignas(64) Bucket {
     const Value* m_values[N];
 };
 
-size_t getNumberOfBuckets(const LinearProbingConfiguration& configuration, size_t numberOfObjects) {
-    size_t numberOfBuckets = static_cast<size_t>(
-        ceil(configuration.HASH_TABLE_SIZE_RATIO * static_cast<double>(numberOfObjects)));
-
-    if (numberOfBuckets < 1) {
-        throw std::runtime_error(
-            "Cannot allocate less than 1 bucket for a linear probing hash table.");
-    }
-
-    return numberOfBuckets;
-};
+size_t getNumberOfBuckets(const LinearProbingConfiguration& configuration, size_t numberOfObjects);
 
 }  // namespace LinearProbing
 }  // namespace internal

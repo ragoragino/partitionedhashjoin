@@ -17,10 +17,10 @@ class PartitionsInfo {
    public:
     void ComputePartitionsBoundaries(std::vector<size_t> partitionSizes);
 
-    size_t GetPartitionBoundary(size_t partition);
+    std::pair<size_t, size_t> GetPartitionBoundaries(size_t partition) const;
 
    private:
-    std::vector<size_t> m_partitionBorders;
+    std::vector<std::pair<size_t, size_t>> m_partitionBorders;
 };
 
 struct PartitioningConfiguration {
@@ -63,7 +63,8 @@ class HashJoiner {
         const internal::PartitioningConfiguration& partitionConfiguration);
 
     std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>
-    Build(std::shared_ptr<Common::Table<Common::Tuple>> tableA, size_t numberOfWorkers);
+    BuildFromPartition(std::shared_ptr<Common::Table<Common::Tuple>> tableA, size_t partitionStart,
+                       size_t partitionEnd);
 
     std::shared_ptr<Common::Table<Common::JoinedTuple>> Probe(
         std::shared_ptr<
@@ -75,8 +76,8 @@ class HashJoiner {
         std::shared_ptr<Common::Table<Common::JoinedTuple>> joinedTable,
         std::shared_ptr<Common::Table<Common::Tuple>> partitionedTableA,
         std::shared_ptr<Common::Table<Common::Tuple>> partitionedTableB,
-        std::pair<internal::PartitionsInfo, internal::PartitionsInfo> partitionInfo,
-        std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>
+        const std::pair<internal::PartitionsInfo, internal::PartitionsInfo>& partitionInfo,
+        const std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>&
             partitionConfiguration);
 
     std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>

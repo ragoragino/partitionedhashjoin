@@ -24,15 +24,15 @@ std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_
 HashJoiner::Build(
     std::shared_ptr<Common::Table<Common::Tuple>> tableA, size_t numberOfWorkers) {
     const size_t tableASize = tableA->GetSize();
-    double expectedHashTableSize =
-        static_cast<double>(tableASize) / m_configuration.HASH_TABLE_SIZE_RATIO;
 
-    size_t hashTableSize = expectedHashTableSize / static_cast<double>(HASH_TABLE_BUCKET_SIZE);
+    HashTables::SeparateChainingConfiguration configuration{
+        0.1,  // HASH_TABLE_SIZE_RATIO
+    };
 
     std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
     auto hashTable = std::make_shared<
         HashTables::SeparateChainingHashTable<Common::Tuple, HASH_TABLE_BUCKET_SIZE>>(
-            hasher, hashTableSize, tableASize);
+        configuration, hasher, tableASize);
 
     size_t batchSize = static_cast<size_t>(tableASize / numberOfWorkers);
 
