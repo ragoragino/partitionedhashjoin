@@ -95,7 +95,7 @@ std::future<Common::TasksErrorHolder> Zipf::FillTable(
         for (size_t i = start; i != end; i++) {
             // TODO: Probably call zipf for a batch of values?
             (*table)[i].id = Zipf::generate(parameters.alpha, cardinality, generator) + correction;
-            (*table)[i].payload = 0;  // TODO
+            (*table)[i].payload = i;  // TODO: Maybe choose proper payload
         }
     };
 

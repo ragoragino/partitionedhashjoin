@@ -1,74 +1,54 @@
-#include <mimalloc.h>
+// #include <mimalloc.h>
 
+#include <boost/program_options.hpp>
+#include <boost/thread/thread.hpp>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <future>
 #include <iostream>
 #include <limits>
 #include <memory>
 #include <thread>
-
-#include <boost/thread/thread.hpp>
+#include <utility>
 
 #include "Common/Configuration.hpp"
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
+#include "Common/ModuloHasher.hpp"
+#include "Common/MurmurHasher.hpp"
 #include "Common/Random.hpp"
 #include "Common/Table.hpp"
+#include "Common/TestResults.hpp"
 #include "Common/ThreadPool.hpp"
+#include "Common/XXHasher.hpp"
 #include "DataGenerator/Sequential.hpp"
 #include "DataGenerator/Zipf.hpp"
+#include "HashTables/LinearProbing.hpp"
+#include "HashTables/SeparateChaining.hpp"
 #include "NoPartitioning/HashJoin.hpp"
 #include "RadixCluster/HashJoin.hpp"
 
-int main(int argc, char** argv) {
-    mi_version();  // ensure mimalloc library is linked
-
-    // hardware_concurrency should take into account hyperthreading
-    int maxNumberOfThreads = std::thread::hardware_concurrency() - 1;
-    if (maxNumberOfThreads < 1) {
-        maxNumberOfThreads = 1;
-    }
-
-    Common::Configuration configuration{NoPartitioning::Configuration{
-                                            10000,  // MIN_BATCH_SIZE
-                                            0.75,   // HASH_TABLE_SIZE_RATIO
-                                        },
-                                        RadixClustering::Configuration{
-                                            10, // TODO             // MIN_BATCH_SIZE
-                                            1.0 / 0.75,     // HASH_TABLE_SIZE_RATIO
-                                            1'000'000'000,  // HASH_TABLE_SIZE_LIMIT
-                                            4'000'000 / boost::thread::physical_concurrency(),  // L2_CACHE_SIZE
-                                        }};
-
-    Common::LoggerConfiguration logger_configuration{};
-    logger_configuration.severity_level = Common::SeverityLevel::trace;
-
-    Common::InitializeLogger(logger_configuration);
-
-    auto logger = Common::GetNewLogger();
-    Common::AddComponentAttributeToLogger(logger, "main");
-
-    uint64_t primaryKeyRelationSize = 16'000'000;
-    uint64_t secondaryKeyRelationSize = 25'600'000;
-
-    LOG(logger, Common::SeverityLevel::info)
-        << "Generating primary relation with size " << primaryKeyRelationSize << " and "
-        << "secondary relation with size " << secondaryKeyRelationSize << ".";
-
-    std::shared_ptr<Common::IThreadPool> threadPool =
-        std::make_shared<Common::ThreadPool>(maxNumberOfThreads);
+std::pair<std::shared_ptr<Common::Table<Common::Tuple>>,
+          std::shared_ptr<Common::Table<Common::Tuple>>>
+generateTables(Common::LoggerType& logger, const Common::Configuration& config,
+               std::shared_ptr<Common::IThreadPool> threadPool) {
+    LOG(logger, Common::SeverityLevel::debug)
+        << "Generating primary relation with size " << config.PrimaryRelationSize << " and "
+        << "secondary relation with size " << config.SecondaryRelationSize << ".";
 
     auto randomNumberGeneratorFactory =
         std::make_shared<Common::MultiplicativeLCGRandomNumberGeneratorFactory>();
 
-    auto primaryKeyRelation =
-        std::make_shared<Common::Table<Common::Tuple>>(primaryKeyRelationSize);
-    auto secondaryKeyRelation =
-        std::make_shared<Common::Table<Common::Tuple>>(secondaryKeyRelationSize);
+    auto primaryKeyRelation = std::make_shared<Common::Table<Common::Tuple>>(
+        config.PrimaryRelationSize, Common::generate_uuid());
+    auto secondaryKeyRelation = std::make_shared<Common::Table<Common::Tuple>>(
+        config.SecondaryRelationSize, Common::generate_uuid());
 
     int64_t startIndex = 1;
-    int64_t endIndex = startIndex + primaryKeyRelationSize - 1;
+    int64_t endIndex = startIndex + config.PrimaryRelationSize - 1;
 
     std::future<Common::TasksErrorHolder> generatePrimaryKeyRelationFuture =
         DataGenerator::Sequential::FillTable(threadPool, primaryKeyRelation,
@@ -77,7 +57,8 @@ int main(int argc, char** argv) {
     std::future<Common::TasksErrorHolder> generateSecondaryKeyRelationFuture =
         DataGenerator::Zipf::FillTable(
             threadPool, secondaryKeyRelation,
-            DataGenerator::Zipf::Parameters{1.0, std::make_pair(startIndex, endIndex),
+            DataGenerator::Zipf::Parameters{config.SkewParameter,
+                                            std::make_pair(startIndex, endIndex),
                                             randomNumberGeneratorFactory});
 
     generatePrimaryKeyRelationFuture.wait();
@@ -91,49 +72,186 @@ int main(int argc, char** argv) {
         throw generateSecondaryKeyRelationFuture.get().Pop();
     }
 
-    LOG(logger, Common::SeverityLevel::info) << "Generating finished.";
+    LOG(logger, Common::SeverityLevel::debug) << "Generation of relations finished.";
 
-    LOG(logger, Common::SeverityLevel::info) << "Executing NoPartitionHashJoin algorithm.";
+    return std::make_pair(primaryKeyRelation, secondaryKeyRelation);
+}
 
-    NoPartitioning::HashJoiner noPartitioningHashJoiner(configuration.NoPartitioningConfiguration,
-                                                        threadPool);
+template <typename HashTableFactory>
+Common::HashJoinTimingResult joinNoPartitioning(
+    Common::LoggerType& logger, const Common::Configuration& config,
+    std::shared_ptr<Common::IThreadPool> threadPool,
+    std::pair<std::shared_ptr<Common::Table<Common::Tuple>>,
+              std::shared_ptr<Common::Table<Common::Tuple>>>
+        relations,
+    HashTableFactory factory) {
+    LOG(logger, Common::SeverityLevel::debug) << "Executing NoPartitionHashJoin algorithm.";
 
+    auto noPartitioningHashJoiner =
+        NoPartitioning::HashJoiner(config.NoPartitioningConfiguration, threadPool, factory);
+
+    Common::Parameters params;
+    params.SetParameter("PrimaryRelationSize", std::to_string(config.PrimaryRelationSize));
+    params.SetParameter("SecondaryRelationSize", std::to_string(config.SecondaryRelationSize));
+    params.SetParameter("Skew", std::to_string(config.SkewParameter));
+    params.SetParameter("Type", "NoPartitioning");
+
+    std::shared_ptr<Common::IHashJoinTimer> timer = std::make_shared<Common::HashJoinTimer>(params);
     std::shared_ptr<Common::Table<Common::JoinedTuple>> outputTupleNoPartitioning =
-        noPartitioningHashJoiner.Run(primaryKeyRelation, secondaryKeyRelation);
+        noPartitioningHashJoiner.Run(relations.first, relations.second, timer);
 
-    LOG(logger, Common::SeverityLevel::info) << "Finished NoPartitionHashJoin algorithm.";
+    LOG(logger, Common::SeverityLevel::debug)
+        << "Finished executing NoPartitionHashJoin algorithm.";
 
-    LOG(logger, Common::SeverityLevel::info) << "Executing Radix Clustering join algorithm.";
+    return timer->GetResult();
+}
 
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
+template <typename HashTableFactory, typename PartitionHasher>
+Common::HashJoinTimingResult joinRadixPartitioning(
+    Common::LoggerType& logger, const Common::Configuration& config,
+    std::shared_ptr<Common::IThreadPool> threadPool,
+    std::pair<std::shared_ptr<Common::Table<Common::Tuple>>,
+              std::shared_ptr<Common::Table<Common::Tuple>>>
+        relations,
+    PartitionHasher partitionsHasher, HashTableFactory factory) {
+    LOG(logger, Common::SeverityLevel::debug) << "Executing Radix Clustering join algorithm.";
 
-    RadixClustering::HashJoiner radixClusteringHashJoiner(
-        configuration.RadixClusteringConfiguration, threadPool, hasher);
+    auto radixClusteringHashJoiner = RadixClustering::HashJoiner(
+        config.RadixClusteringConfiguration, threadPool, partitionsHasher, factory);
 
+    Common::Parameters params;
+    params.SetParameter("PrimaryRelationSize", std::to_string(config.PrimaryRelationSize));
+    params.SetParameter("SecondaryRelationSize", std::to_string(config.SecondaryRelationSize));
+    params.SetParameter("Skew", std::to_string(config.SkewParameter));
+    params.SetParameter("Type", "RadixParitioning");
+
+    std::shared_ptr<Common::IHashJoinTimer> timer = std::make_shared<Common::HashJoinTimer>(params);
     std::shared_ptr<Common::Table<Common::JoinedTuple>> outputTupleRadixClustering =
-        radixClusteringHashJoiner.Run(primaryKeyRelation, secondaryKeyRelation);
+        radixClusteringHashJoiner.Run(relations.first, relations.second, timer);
+
+    LOG(logger, Common::SeverityLevel::debug)
+        << "Finished executing Radix Clustering join algorithm.";
+
+    return timer->GetResult();
+}
+
+Common::Configuration parseArguments(int argc, char** argv) {
+    Common::Configuration configuration{};
+
+    boost::program_options::options_description desc("Allowed options");
+    desc.add_options()("help,h", "Help screen")(
+        "primary",
+        boost::program_options::value<size_t>(&configuration.PrimaryRelationSize)
+            ->default_value(1'000'000),
+        "PrimaryRelationSize")(
+        "secondary",
+        boost::program_options::value<size_t>(&configuration.SecondaryRelationSize)
+            ->default_value(20'000'000),
+        "SecondaryRelationSize")(
+        "skew",
+        boost::program_options::value<double>(&configuration.SkewParameter)->default_value(1.05),
+        "SkewParameter")("log",
+                         boost::program_options::value<Common::SeverityLevel>(
+                             &configuration.LoggerConfiguration.SeverityLevel)
+                             ->default_value(Common::debug),
+                         "LogLevel")(
+        "join", boost::program_options::value<Common::JoinAlgorithmType>(&configuration.JoinType),
+        "joinAlgorithmType")(
+        "format",
+        boost::program_options::value<Common::ResultsFormat>(&configuration.ResultFormat)
+            ->default_value(Common::ResultsFormat::JSON),
+        "OutputFormat")(
+        "output,o",
+        boost::program_options::value<Common::OutputType>(&configuration.Output.Type)
+            ->default_value(Common::OutputType::File),
+        "OutputType")("filename,f",
+                      boost::program_options::value<std::string>(&configuration.Output.File.Name)
+                          ->default_value("hashjoin.txt"),
+                      "Filename");
+
+    boost::program_options::variables_map vm;
+    boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+    }
+
+    boost::program_options::notify(vm);
+
+    return configuration;
+}
+
+int main(int argc, char** argv) {
+    static constexpr size_t TupleSize = 3;
+    using TupleType = Common::Tuple;
+    using HasherType = Common::XXHasher;
+
+    HasherType hasher{};
+    HashTables::LinearProbingFactory<TupleType, TupleSize, HasherType> hashTableFactory(
+        HashTables::LinearProbingConfiguration{0.75}, hasher);
+
+    // mi_version();  // ensure mimalloc library is linked
+
+    // Parse command line arguments with configuration parameters
+    Common::Configuration configuration = parseArguments(argc, argv);
+
+    // Initialize logger
+    Common::InitializeLogger(configuration.LoggerConfiguration);
+
+    auto logger = Common::GetNewLogger();
+    Common::AddComponentAttributeToLogger(logger, "main");
+
+    // Initialize thread pool
+    // hardware_concurrency should take into account hyperthreading
+    int maxNumberOfThreads = std::thread::hardware_concurrency() - 1;
+    if (maxNumberOfThreads < 1) {
+        maxNumberOfThreads = 1;
+    }
+
+    std::shared_ptr<Common::IThreadPool> threadPool =
+        std::make_shared<Common::ThreadPool>(maxNumberOfThreads);
+
+    // Initialize results formatter
+    std::shared_ptr<Common::ITestResultsFormatter> resultsFormatter =
+        Common::SelectResultsFormatter(configuration);
+
+    // Initialize results renderer
+    std::shared_ptr<Common::ITestResultsRenderer> resultsRenderer =
+        Common::SelectResultsRenderer(configuration);
+
+    LOG(logger, Common::SeverityLevel::info) << "Starting running tests.";
+
+    // Generate primary and secondary tables
+    auto relations = generateTables(logger, configuration, threadPool);
+
+    // Run selected join algorithm
+    Common::HashJoinTimingResult joinResults;
+    switch (configuration.JoinType) {
+        case Common::JoinAlgorithmType::NoPartitioning: {
+            joinResults =
+                joinNoPartitioning(logger, configuration, threadPool, relations, hashTableFactory);
+            break;
+        }
+        case Common::JoinAlgorithmType::RadixParitioning: {
+            HasherType partitionsHasher{};
+            joinResults = joinRadixPartitioning(logger, configuration, threadPool, relations,
+                                                partitionsHasher, hashTableFactory);
+            break;
+        }
+        default:
+            std::stringstream is;
+            is << "Unrecognized join algorithm: " << configuration.JoinType << ".";
+            throw std::runtime_error(is.str());
+    }
+
+    // Output results of the join algorithm
+    resultsRenderer->Render(resultsFormatter, joinResults);
+
+    LOG(logger, Common::SeverityLevel::info) << "Finished running tests.";
 
     threadPool->Stop();
 
-    LOG(logger, Common::SeverityLevel::info) << "ThreadPool stopped.";
-
-    /*
-    HashJoin::RadixClusterPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
-
-    // Data distribution with low skew
-    DataGenerator::Zipf::generate(threadPool, secondaryKeyRelation,
-    DataGenerator::Zipf::Parameters{ 1.05, primaryKeyRelationSize });
-
-    HashJoin::NoPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
-    HashJoin::RadixClusterPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
-
-    // Data distribution with high skew
-    DataGenerator::Zipf::generate(threadPool, secondaryKeyRelation,
-    DataGenerator::Zipf::Parameters{ 1.25, primaryKeyRelationSize });
-
-    HashJoin::NoPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
-    HashJoin::RadixClusterPartitioned(threadPool, primaryKeyRelation, secondaryKeyRelation);
-    */
+    LOG(logger, Common::SeverityLevel::debug) << "ThreadPool stopped.";
 
     return 0;
 }

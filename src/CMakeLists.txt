@@ -5,11 +5,11 @@ add_library(phjoinlib STATIC
 	"Common/Random.cpp"
 	"Common/Allocator.cpp" 
 	"Common/IThreadPool.cpp" 
+	"Common/MurmurHash.cpp" 
 	"DataGenerator/Zipf.cpp" 
 	"DataGenerator/Sequential.cpp"
 	"HashTables/LinearProbing.cpp"
 	"HashTables/SeparateChaining.cpp"
-	"NoPartitioning/HashJoin.cpp" 
 	"RadixCluster/HashJoin.cpp")
 
 target_compile_features(phjoinlib PUBLIC cxx_std_17)
@@ -18,9 +18,7 @@ target_include_directories(phjoinlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(phjoinlib PUBLIC ${Boost_INCLUDE_DIR})
 target_link_libraries(phjoinlib PUBLIC ${Boost_LIBRARIES})
 
-target_link_libraries(phjoinlib PUBLIC xxhash_cpp::xxhash_cpp)
-
-target_link_libraries(phjoinlib PUBLIC mimalloc)
+target_link_libraries(phjoinlib PUBLIC xxHash::xxhash)
 
 add_executable(phjoin main.cpp)
 target_link_libraries(phjoin phjoinlib)

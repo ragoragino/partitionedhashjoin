@@ -56,9 +56,11 @@ class SeparateChainingFixture : public benchmark::Fixture {
             HashTables::SeparateChainingConfiguration configuration{
                 0.1,  // HASH_TABLE_SIZE_RATIO
             };
-            
-             m_hashTable = std::make_shared<HashTables::SeparateChainingHashTable<Common::Tuple, 3>>(
-                configuration, m_hasher, m_numberOfObjects);
+
+            Common::XXHasher hasher{};
+            HashTables::SeparateChainingFactory<Common::Tuple, 3, Common::XXHasher> factory(
+                configuration, hasher);
+            m_hashTable = factory.New(m_numberOfObjects);
 
             m_cond.notify_all();
 
@@ -89,7 +91,7 @@ class SeparateChainingFixture : public benchmark::Fixture {
    protected:
     size_t m_start, m_end, m_range, m_numberOfObjects;
     std::shared_ptr<Common::XXHasher> m_hasher;
-    std::shared_ptr<HashTables::SeparateChainingHashTable<Common::Tuple, 3>> m_hashTable;
+    std::shared_ptr<HashTables::SeparateChainingFactory<Common::Tuple, 3, Common::XXHasher>::HashTableType> m_hashTable;
     Common::LoggerType m_logger;
 
     std::atomic<bool> m_finished;
@@ -173,8 +175,10 @@ class LinearProbingFixture : public benchmark::Fixture {
 
             m_finished.store(true);
 
-            m_hashTable = std::make_shared<HashTables::LinearProbingHashTable<Common::Tuple, 3>>(
-                *m_configuration, m_hasher, m_numberOfObjects);
+            Common::XXHasher hasher{};
+            HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher> factory(
+                *m_configuration, hasher);
+            m_hashTable = factory.New(m_numberOfObjects);
 
             m_cond.notify_all();
 
@@ -206,7 +210,7 @@ class LinearProbingFixture : public benchmark::Fixture {
     std::shared_ptr<HashTables::LinearProbingConfiguration> m_configuration; 
     size_t m_start, m_end, m_range, m_numberOfObjects;
     std::shared_ptr<Common::XXHasher> m_hasher;
-    std::shared_ptr<HashTables::LinearProbingHashTable<Common::Tuple, 3>> m_hashTable;
+    std::shared_ptr<HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher>::HashTableType> m_hashTable;
     Common::LoggerType m_logger;
 
     std::atomic<bool> m_finished;

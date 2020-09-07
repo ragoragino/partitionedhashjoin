@@ -8,7 +8,7 @@
 namespace Common {
 class IHasher {
    public:
-    virtual uint32_t Hash(int64_t key, size_t cardinality) = 0;
+    virtual uint64_t Hash(int64_t key, size_t cardinality) = 0;
 
     virtual ~IHasher() = default;
 };

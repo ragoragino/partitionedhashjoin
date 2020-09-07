@@ -14,13 +14,13 @@ void testInsertGetAndExists(T&& hashTable) {
         987654321,  // payload
     };
 
-    hashTable.Insert(tuple.id, &tuple);
+    hashTable->Insert(tuple.id, &tuple);
 
-    bool hashKeyExists = hashTable.Exists(tuple.id);
+    bool hashKeyExists = hashTable->Exists(tuple.id);
 
     EXPECT_TRUE(hashKeyExists);
 
-    const Common::Tuple* hashValue = hashTable.Get(tuple.id);
+    const Common::Tuple* hashValue = hashTable->Get(tuple.id);
 
     EXPECT_EQ(&tuple, hashValue);
 }
@@ -35,10 +35,10 @@ void testIterator(T&& hashTable, size_t numberOfTuples) {
             static_cast<int64_t>(i),
         };
 
-        hashTable.Insert(input_tuples[i].id, &input_tuples[i]);
+        hashTable->Insert(input_tuples[i].id, &input_tuples[i]);
     }
 
-    std::vector<const Common::Tuple*> allTuples = hashTable.GetAll(id);
+    std::vector<const Common::Tuple*> allTuples = hashTable->GetAll(id);
 
     EXPECT_EQ(input_tuples.size(), allTuples.size());
 }
@@ -86,17 +86,26 @@ TEST(SeparateChainingTest, InsertGetAndExists) {
     HashTables::SeparateChainingConfiguration configuration{
         0.3,  // HASH_TABLE_SIZE_RATIO
     };
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    HashTables::SeparateChainingHashTable<Common::Tuple, 3> hashTable(configuration, hasher,
-                                                                      nOfObjects);
+
+    Common::XXHasher hasher{};
+    HashTables::SeparateChainingFactory<Common::Tuple, 3, Common::XXHasher> factory(configuration,
+                                                                                    hasher);
+    auto hashTable = factory.New(nOfObjects);
+
     testInsertGetAndExists(hashTable);
 }
 
 TEST(LinearProbingTest, InsertGetAndExists) {
     size_t nOfObjects = 10;
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    HashTables::LinearProbingConfiguration config{/*.HASH_TABLE_SIZE_RATIO =*/1.0 / 0.75};
-    HashTables::LinearProbingHashTable<Common::Tuple, 3> hashTable(config, hasher, nOfObjects);
+    HashTables::LinearProbingConfiguration configuration{
+        1.0 / 0.75, // HASH_TABLE_SIZE_RATIO
+    };
+
+    Common::XXHasher hasher{};
+    HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher> factory(
+        configuration, hasher);
+    auto hashTable = factory.New(nOfObjects);
+
     testInsertGetAndExists(hashTable);
 }
 
@@ -105,17 +114,26 @@ TEST(SeparateChainingTest, Iterator) {
     HashTables::SeparateChainingConfiguration configuration{
         0.3,  // HASH_TABLE_SIZE_RATIO
     };
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    HashTables::SeparateChainingHashTable<Common::Tuple, 3> hashTable(configuration, hasher,
-                                                                      nOfObjects);
+
+    Common::XXHasher hasher{};
+    HashTables::SeparateChainingFactory<Common::Tuple, 3, Common::XXHasher> factory(configuration,
+                                                                                    hasher);
+    auto hashTable = factory.New(nOfObjects);
+
     testIterator(hashTable, nOfObjects);
 }
 
 TEST(LinearProbingTest, Iterator) {
     size_t nOfObjects = 10;
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    HashTables::LinearProbingConfiguration config{/*.HASH_TABLE_SIZE_RATIO =*/1.0 / 0.75};
-    HashTables::LinearProbingHashTable<Common::Tuple, 3> hashTable(config, hasher, nOfObjects);
+    HashTables::LinearProbingConfiguration configuration{
+        1.0 / 0.75, // HASH_TABLE_SIZE_RATIO
+    };
+
+    Common::XXHasher hasher{};
+    HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher> factory(configuration,
+                                                                                 hasher);
+    auto hashTable = factory.New(nOfObjects);
+
     testIterator(hashTable, nOfObjects);
 }
 
@@ -124,16 +142,23 @@ TEST(SeparateChainingTest, TestMultiThreadedInsert) {
     HashTables::SeparateChainingConfiguration configuration{
         0.1,  // HASH_TABLE_SIZE_RATIO
     };
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    auto hashTable = std::make_shared<HashTables::SeparateChainingHashTable<Common::Tuple, 3>>(
+    Common::XXHasher hasher{};
+    auto hashTable =
+        std::make_shared<HashTables::SeparateChainingHashTable<Common::Tuple, 3, Common::XXHasher>>(
         configuration, hasher, nOfObjects);
     testMultiThreaded(hashTable, nOfObjects);
 }
 
 TEST(LinearProbingTest, TestMultiThreadedInsert) {
     size_t nOfObjects = 1000;
-    std::shared_ptr<Common::IHasher> hasher = std::make_shared<Common::XXHasher>();
-    HashTables::LinearProbingConfiguration config{/*.HASH_TABLE_SIZE_RATIO =*/1.0 / 0.75};
-    HashTables::LinearProbingHashTable<Common::Tuple, 3> hashTable(config, hasher, nOfObjects);
+    HashTables::LinearProbingConfiguration configuration{
+        1.0 / 0.75,  // HASH_TABLE_SIZE_RATIO
+    };
+
+    Common::XXHasher hasher{};
+    HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher> factory(configuration,
+                                                                                 hasher);
+    auto hashTable = factory.New(nOfObjects);
+
     testIterator(hashTable, nOfObjects);
 }

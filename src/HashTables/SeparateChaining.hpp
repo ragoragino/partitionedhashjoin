@@ -13,7 +13,7 @@
 
 namespace HashTables {
 struct SeparateChainingConfiguration {
-    const double HASH_TABLE_SIZE_RATIO;
+    double HASH_TABLE_SIZE_RATIO = 0.25;
 };
 
 namespace internal {
@@ -139,14 +139,14 @@ size_t getNumberOfBuckets(const SeparateChainingConfiguration& configuration,
 }  // namespace SeparateChaining
 }  // namespace internal
 
-template <typename BucketValueType, size_t BucketSize>
+template <typename BucketValueType, size_t BucketSize, typename HasherType>
 class SeparateChainingHashTable {
     using Bucket = internal::SeparateChaining::Bucket<BucketValueType, BucketSize>;
     using BucketAllocator = internal::SeparateChaining::BucketAllocator<Bucket>;
 
    public:
-    SeparateChainingHashTable(const SeparateChainingConfiguration& configuration,
-                              std::shared_ptr<Common::IHasher> hasher, size_t numberOfObjects)
+    SeparateChainingHashTable(const SeparateChainingConfiguration& configuration, HasherType hasher,
+                              size_t numberOfObjects)
         : m_hasher(hasher),
           m_configuration(configuration),
           m_numberOfBuckets(
@@ -174,7 +174,7 @@ class SeparateChainingHashTable {
 
     // thread-safe
     void Insert(int64_t key, const BucketValueType* tuple) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         // Spin on latch until you succeed in locking it
         while (m_bucketPtrsLatches[hash].test_and_set(std::memory_order_acquire))
@@ -215,7 +215,7 @@ class SeparateChainingHashTable {
 
     // not thread-safe - we shouldn't need to run Exists during building of hash index
     bool Exists(int64_t key) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         if (m_bucketPtrs[hash] == nullptr) {
             return false;
@@ -235,7 +235,7 @@ class SeparateChainingHashTable {
 
     // not thread-safe - we shouldn't need to run Get during building of hash index
     const BucketValueType* Get(int64_t key) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         if (m_bucketPtrs[hash] == nullptr) {
             return false;
@@ -256,7 +256,7 @@ class SeparateChainingHashTable {
 
     // not thread-safe - we shouldn't need to run GetAll during building of hash index
     std::vector<const BucketValueType*> GetAll(int64_t key) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         if (m_bucketPtrs[hash] == nullptr) {
             return std::vector<const BucketValueType*>{};
@@ -272,8 +272,26 @@ class SeparateChainingHashTable {
     std::vector<Bucket*> m_bucketPtrs;
     std::vector<std::atomic_flag> m_bucketPtrsLatches;
     std::vector<Bucket> m_firstBuckets;
-    std::shared_ptr<Common::IHasher> m_hasher;
+    HasherType m_hasher;
     BucketAllocator m_bucketAllocator;
     const SeparateChainingConfiguration m_configuration;
 };
+
+template <typename BucketValueType, size_t BucketSize, typename HasherType>
+class SeparateChainingFactory {
+   public:
+    typedef SeparateChainingHashTable<BucketValueType, BucketSize, HasherType> HashTableType;
+
+    SeparateChainingFactory(const SeparateChainingConfiguration& configuration, HasherType hasher)
+        : m_configuration(configuration), m_hasher(hasher) {}
+
+    std::shared_ptr<HashTableType> New(size_t numberOfObjects) const {
+        return std::make_shared<HashTableType>(m_configuration, m_hasher, numberOfObjects);
+    }
+
+   private:
+    const HasherType m_hasher;
+    const SeparateChainingConfiguration m_configuration;
+};
+
 }  // namespace HashTables

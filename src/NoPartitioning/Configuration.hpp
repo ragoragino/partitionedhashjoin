@@ -4,7 +4,6 @@
 
 namespace NoPartitioning {
 struct Configuration {
-    int32_t MIN_BATCH_SIZE;
-    double HASH_TABLE_SIZE_RATIO;
+    size_t MinBatchSize = 10000;
 };
 }  // namespace NoPartitioning

@@ -13,7 +13,7 @@
 
 namespace HashTables {
 struct LinearProbingConfiguration {
-    const double HASH_TABLE_SIZE_RATIO;
+    double HASH_TABLE_SIZE_RATIO = 1.25;
 };
 
 namespace internal {
@@ -90,13 +90,13 @@ size_t getNumberOfBuckets(const LinearProbingConfiguration& configuration, size_
 }  // namespace LinearProbing
 }  // namespace internal
 
-template <typename BucketValueType, size_t BucketSize>
+template <typename BucketValueType, size_t BucketSize, typename HasherType>
 class LinearProbingHashTable {
     using Bucket = internal::LinearProbing::Bucket<BucketValueType, BucketSize>;
 
    public:
-    LinearProbingHashTable(const LinearProbingConfiguration& configuration,
-                           std::shared_ptr<Common::IHasher> hasher, size_t numberOfObjects)
+    LinearProbingHashTable(const LinearProbingConfiguration& configuration, const HasherType& hasher,
+                           size_t numberOfObjects)
         : m_hasher(hasher),
           m_configuration(configuration),
           m_numberOfBuckets(
@@ -113,7 +113,7 @@ class LinearProbingHashTable {
 
     // thread-safe
     void Insert(int64_t key, const BucketValueType* tuple) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         bool insertSucceeded = false;
         while (true) {
@@ -136,7 +136,7 @@ class LinearProbingHashTable {
 
     // not thread-safe - we shouldn't need to run Exists during building of hash index
     bool Exists(int64_t key) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         bool exists = false;
         const Bucket* bucketPtr;
@@ -158,8 +158,8 @@ class LinearProbingHashTable {
     }
 
     // not thread-safe - we shouldn't need to run Get during building of hash index
-    const Common::Tuple* Get(int64_t key) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+    const BucketValueType* Get(int64_t key) {
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         bool exists = false;
         const BucketValueType* bucketValue = nullptr;
@@ -183,7 +183,7 @@ class LinearProbingHashTable {
 
     // not thread-safe - we shouldn't need to run GetAll during building of hash index
     std::vector<const BucketValueType*> GetAll(int64_t key) {
-        uint32_t hash = m_hasher->Hash(key, m_numberOfBuckets);
+        uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         bool exists = false;
         std::vector<const BucketValueType*> bucketValues{};
@@ -208,6 +208,26 @@ class LinearProbingHashTable {
     const size_t m_numberOfBuckets;
     std::vector<std::atomic_flag> m_bucketLatches;
     std::vector<Bucket> m_buckets;
-    std::shared_ptr<Common::IHasher> m_hasher;
+    HasherType m_hasher;
 };
+
+template <typename BucketValueType, size_t BucketSize, typename HasherType>
+class LinearProbingFactory {
+   public:
+    typedef LinearProbingHashTable<BucketValueType, BucketSize, HasherType> HashTableType;
+
+    LinearProbingFactory(const LinearProbingConfiguration& configuration, HasherType hasher)
+        : m_configuration(configuration), m_hasher(hasher) {}
+
+    std::shared_ptr<HashTableType> New(
+        size_t numberOfObjects) const {
+        return std::make_shared<HashTableType>(
+            m_configuration, m_hasher, numberOfObjects);
+    }
+
+   private:
+    const HasherType m_hasher;
+    const LinearProbingConfiguration m_configuration;
+};
+
 }  // namespace HashTables

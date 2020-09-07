@@ -4,12 +4,15 @@
 #include <iostream>
 #include <new>
 #include <vector>
+#include <string>
 
 #ifndef CACHE_LINE_SIZE
 #define CACHE_LINE_SIZE std::hardware_destructive_interference_size
 #endif
 
 namespace Common {
+std::string generate_uuid();
+
 struct alignas(16) Tuple {
     int64_t id;
     int64_t payload;
@@ -28,9 +31,9 @@ struct JoinedTuple {
 template<typename TupleType>
 class Table {
    public:
-    Table(){};
+    Table(std::string id) : m_id(id) {};
 
-    Table(size_t size) : m_tuples(size) {}
+    Table(size_t size, std::string id) : m_tuples(size), m_id(id) {}
 
     TupleType &operator[](size_t index) { return m_tuples[index]; }
 
@@ -40,7 +43,10 @@ class Table {
 
     size_t GetCapacity() const { return m_tuples.capacity(); }
 
+    std::string GetID() const { return m_id; }
+
    private:
+    const std::string m_id;
     // To minimize the posobility of false sharing in cache, we align the vector on
     // cache line size
     alignas(CACHE_LINE_SIZE) std::vector<TupleType> m_tuples;

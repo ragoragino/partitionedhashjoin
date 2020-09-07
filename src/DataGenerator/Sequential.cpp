@@ -21,7 +21,7 @@ std::future<Common::TasksErrorHolder> Sequential::FillTable(
     auto fillBatch = [&table](size_t tableStart, size_t tableEnd, int64_t indexStart) {
         for (size_t i = tableStart; i != tableEnd; i++) {
             (*table)[i].id = indexStart++;
-            (*table)[i].payload = i;  // TODO
+            (*table)[i].payload = i;  // TODO: Maybe choose proper payload
         }
     };
 
