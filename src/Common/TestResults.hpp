@@ -7,6 +7,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -18,75 +19,231 @@
 namespace Common {
 class Parameters {
    public:
+    using StorageType = std::map<std::string, std::string>;
+
     void SetParameter(std::string key, std::string value) { m_values[key] = value; };
 
-    // TODO: iterator
-    std::map<std::string, std::string>::const_iterator begin() { return m_values.begin(); };
-    std::map<std::string, std::string>::const_iterator end() { return m_values.end(); };
+    class Iterator {
+       public:
+        Iterator::Iterator(StorageType::const_iterator iter) : m_iter{iter} {}
+
+        typename Iterator& operator++() {
+            this->m_iter++;
+            return *this;
+        }
+
+        typename Iterator& Iterator::operator++(int) {
+            Iterator it = *this;
+            ++*this;
+            return it;
+        }
+
+        const std::pair<const std::string, std::string>& operator*() { return *this->m_iter; }
+
+        bool operator==(const Iterator& iter) { return this->m_iter == iter.m_iter; }
+
+        bool operator!=(const Iterator& iter) { return this->m_iter != iter.m_iter; }
+
+       private:
+        StorageType::const_iterator m_iter;
+    };
+
+    Iterator begin() const { return Iterator(m_values.begin()); };
+    Iterator end() const { return Iterator(m_values.end()); };
 
    private:
-    // TODO: Make JSON
-    std::map<std::string, std::string> m_values;
+    StorageType m_values;
 };
 
+// TODO: It would be nice to have a protobuf of this class to be sharable across networks,
+// languages...
 class HashJoinTimingResult {
    public:
     HashJoinTimingResult(){};
 
     HashJoinTimingResult(std::chrono::nanoseconds buildPhase, std::chrono::nanoseconds probePhase,
-                         const Parameters& parameters)
-        : m_buildPhase(buildPhase), m_probePhase(probePhase), m_parameters(parameters) {}
+                         std::chrono::nanoseconds partitioningPhase, const Parameters& parameters)
+        : m_buildPhase(buildPhase),
+          m_probePhase(probePhase),
+          m_partitioningPhase(partitioningPhase),
+          m_parameters(parameters) {}
 
     void SetBuildPhaseDuration(std::chrono::nanoseconds buildPhase) { m_buildPhase = buildPhase; };
     void SetProbePhaseDuration(std::chrono::nanoseconds probePhase) { m_probePhase = probePhase; };
+    void SetPartitioningPhaseDuration(std::chrono::nanoseconds partitioningPhase) {
+        m_partitioningPhase = partitioningPhase;
+    };
     void SetParameters(const Parameters& params) { m_parameters = params; }
 
     std::chrono::nanoseconds GetBuildPhaseDuration() const { return m_buildPhase; };
     std::chrono::nanoseconds GetProbePhaseDuration() const { return m_probePhase; };
-    Parameters GetParameters() const { return m_parameters; }
+    std::chrono::nanoseconds GetPartitioningPhaseDuration() const { return m_partitioningPhase; };
+    const Parameters& GetParameters() const { return m_parameters; }
 
    private:
     Parameters m_parameters;
     std::chrono::nanoseconds m_buildPhase;
     std::chrono::nanoseconds m_probePhase;
+    std::chrono::nanoseconds m_partitioningPhase;
 };
 
-class IHashJoinTimer {
+class ITimeSegmentMeasurer {
    public:
-    virtual void SetBuildPhaseBegin() = 0;
-    virtual void SetBuildPhaseEnd() = 0;
-    virtual void SetProbePhaseBegin() = 0;
-    virtual void SetProbePhaseEnd() = 0;
-    virtual HashJoinTimingResult GetResult() = 0;
-    virtual ~IHashJoinTimer() = default;
+    virtual std::chrono::nanoseconds GetSegmentDuration() = 0;
+    virtual void Start() = 0;
+    virtual void End() = 0;
+    virtual ~ITimeSegmentMeasurer() = default;
 };
 
-class NoOpHashJoinTimer : public IHashJoinTimer {
+class TimeSegmentMeasurer : public ITimeSegmentMeasurer {
    public:
-    void SetBuildPhaseBegin(){};
-    void SetBuildPhaseEnd(){};
-    void SetProbePhaseBegin(){};
-    void SetProbePhaseEnd(){};
-    HashJoinTimingResult GetResult() { return HashJoinTimingResult(); };
-};
-
-class HashJoinTimer : public IHashJoinTimer {
-   public:
-    HashJoinTimer(const Parameters& parameters) : m_parameters(parameters) {}
-
-    void SetBuildPhaseBegin() { m_buildStart = std::chrono::steady_clock::now(); };
-    void SetBuildPhaseEnd() { m_buildEnd = std::chrono::steady_clock::now(); };
-    void SetProbePhaseBegin() { m_probeStart = std::chrono::steady_clock::now(); };
-    void SetProbePhaseEnd() { m_probeEnd = std::chrono::steady_clock::now(); };
-
-    HashJoinTimingResult GetResult() {
-        return HashJoinTimingResult(m_buildEnd - m_buildStart, m_probeEnd - m_probeStart,
-                                    m_parameters);
+    TimeSegmentMeasurer() {}
+    std::chrono::nanoseconds GetSegmentDuration() { return m_duration; }
+    void Start() {
+        m_start = std::chrono::steady_clock::now();
+        m_started = true;
+    };
+    void End() {
+        if (!m_started) {
+            std::runtime_error("TimeSegmentMeasurer::End: Start was not called before End.");
+        }
+        m_duration += std::chrono::steady_clock::now() - m_start;
+        m_started = false;
     };
 
    private:
-    std::chrono::time_point<std::chrono::steady_clock> m_buildStart, m_buildEnd;
-    std::chrono::time_point<std::chrono::steady_clock> m_probeStart, m_probeEnd;
+    bool m_started;
+    std::chrono::time_point<std::chrono::steady_clock> m_start;
+    std::chrono::nanoseconds m_duration;
+};
+
+// IHashJoinTimer provides two interfaces - either direct or indirect
+// Direct interface works by setting SetBuildPhaseBegin and then SetBuildPhaseEnd.
+// Indirect one works by creating a segment measurer (which itself provides Start and End methods)
+// and then passing it back after the measurements.
+// Direct should be used when the measured quantity is continuous,
+// indirect when the measured quantity is discontinuous.
+class IHashJoinTimer {
+   public:
+    // continuous time segment (not thread-safe)
+    virtual void SetBuildPhaseBegin() = 0;
+    virtual void SetBuildPhaseEnd() = 0;
+    virtual void SetPartitioningPhaseBegin() = 0;
+    virtual void SetPartitioningPhaseEnd() = 0;
+    virtual void SetProbePhaseBegin() = 0;
+    virtual void SetProbePhaseEnd() = 0;
+
+    // discontinuous time segment (thread-safe)
+    virtual std::unique_ptr<ITimeSegmentMeasurer> GetSegmentMeasurer() = 0;
+    virtual void SetBuildPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) = 0;
+    virtual void SetProbePhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) = 0;
+    virtual void SetPartitionPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) = 0;
+
+    virtual HashJoinTimingResult GetResult() = 0;
+
+    virtual ~IHashJoinTimer() = default;
+};
+
+class NoOpHashJoinTimer final : public IHashJoinTimer {
+   public:
+    void SetBuildPhaseBegin(){};
+    void SetBuildPhaseEnd(){};
+    void SetPartitioningPhaseBegin(){};
+    void SetPartitioningPhaseEnd(){};
+    void SetProbePhaseBegin(){};
+    void SetProbePhaseEnd(){};
+
+    std::unique_ptr<ITimeSegmentMeasurer> GetSegmentMeasurer() { return nullptr; };
+    void SetBuildPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer){};
+    void SetProbePhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer){};
+    void SetPartitionPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer){};
+
+    HashJoinTimingResult GetResult(){};
+};
+
+class HashJoinTimer final : public IHashJoinTimer {
+   public:
+    HashJoinTimer(const Parameters& parameters)
+        : m_parameters(parameters),
+          m_buildTimeSet(false),
+          m_probeTimeSet(false),
+          m_partitioningTimeSet(false),
+          m_buildTime(0),
+          m_probeTime(0),
+          m_partitioningTime(0) {}
+
+    void SetBuildPhaseBegin() { m_buildStart = std::chrono::steady_clock::now(); };
+    void SetBuildPhaseEnd() {
+        if (m_buildTimeSet) {
+            std::runtime_error(
+                "HashJoinTimer::SetBuildPhaseEnd: build time has been already measured.");
+        }
+        m_buildTime = std::chrono::steady_clock::now() - m_buildStart;
+        m_buildTimeSet = true;
+    };
+    void SetPartitioningPhaseBegin() { m_partitioningStart = std::chrono::steady_clock::now(); };
+    void SetPartitioningPhaseEnd() {
+        if (m_partitioningTimeSet) {
+            std::runtime_error(
+                "HashJoinTimer::SetPartitioningPhaseEnd: probe time has been already measured.");
+        }
+        m_partitioningTime = std::chrono::steady_clock::now() - m_partitioningStart;
+        m_partitioningTimeSet = true;
+    };
+    void SetProbePhaseBegin() { m_probeStart = std::chrono::steady_clock::now(); };
+    void SetProbePhaseEnd() {
+        if (m_probeTimeSet) {
+            std::runtime_error(
+                "HashJoinTimer::SetProbePhaseEnd: partitioning time has been already measured.");
+        }
+        m_probeTime = std::chrono::steady_clock::now() - m_buildStart;
+        m_probeTimeSet = true;
+    };
+
+    std::unique_ptr<ITimeSegmentMeasurer> GetSegmentMeasurer() {
+        return std::make_unique<TimeSegmentMeasurer>();
+    };
+
+    void SetBuildPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_buildTimeSet) {
+            std::runtime_error(
+                "HashJoinTimer::SetBuildPhaseDuration: build time has been already "
+                "measured.");
+        }
+        m_buildTime = measurer->GetSegmentDuration();
+        m_buildTimeSet = true;
+    };
+    void SetProbePhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_probeTimeSet) {
+            std::runtime_error(
+                "HashJoinTimer::SetProbePhaseDuration: probe time has been already measured.");
+        }
+        m_probeTime = measurer->GetSegmentDuration();
+        m_probeTimeSet = true;
+    };
+    void SetPartitionPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_partitioningTimeSet) {
+            std::runtime_error(
+                "HashJoinTimer::SetPartitionPhaseDuration: partitioning time has been already measured.");
+        }
+        m_partitioningTime = measurer->GetSegmentDuration();
+        m_partitioningTimeSet = true;
+    };
+
+    HashJoinTimingResult GetResult() {
+        return HashJoinTimingResult(m_buildTime, m_probeTime, m_partitioningTime, m_parameters);
+    };
+
+   private:
+    std::mutex m_mutex;
+    bool m_buildTimeSet, m_probeTimeSet, m_partitioningTimeSet;
+    std::chrono::nanoseconds m_buildTime, m_probeTime, m_partitioningTime;
+    std::chrono::time_point<std::chrono::steady_clock> m_buildStart, m_probeStart,
+        m_partitioningStart;
+
     Parameters m_parameters;
 };
 
@@ -122,14 +279,21 @@ class JSONResultsFormatter final : public ITestResultsFormatter {
                           pt.add("parameters." + element.first, element.second);
                       });
 
-        pt.add("results.build", getStringDuration<std::chrono::milliseconds,
-                                                  decltype(results.GetBuildPhaseDuration())>(
-                                    results.GetBuildPhaseDuration()) +
-                                    "ms");
-        pt.add("results.probe", getStringDuration<std::chrono::milliseconds,
-                                                  decltype(results.GetBuildPhaseDuration())>(
-                                    results.GetProbePhaseDuration()) +
-                                    "ms");
+        pt.add("results.partition",
+               getStringDuration<std::chrono::milliseconds,
+                                 decltype(results.GetPartitioningPhaseDuration())>(
+                   results.GetPartitioningPhaseDuration()) +
+                   "ms");
+        pt.add(
+            "results.build",
+            getStringDuration<std::chrono::milliseconds, decltype(results.GetBuildPhaseDuration())>(
+                results.GetBuildPhaseDuration()) +
+                "ms");
+        pt.add(
+            "results.probe",
+            getStringDuration<std::chrono::milliseconds, decltype(results.GetBuildPhaseDuration())>(
+                results.GetProbePhaseDuration()) +
+                "ms");
 
         boost::property_tree::json_parser::write_json(stream, pt);
     }

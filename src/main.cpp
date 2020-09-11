@@ -124,6 +124,8 @@ Common::HashJoinTimingResult joinRadixPartitioning(
     params.SetParameter("SecondaryRelationSize", std::to_string(config.SecondaryRelationSize));
     params.SetParameter("Skew", std::to_string(config.SkewParameter));
     params.SetParameter("Type", "RadixParitioning");
+    params.SetParameter("NumberOfPartitions",
+                        std::to_string(config.RadixClusteringConfiguration.NumberOfPartitions));
 
     std::shared_ptr<Common::IHashJoinTimer> timer = std::make_shared<Common::HashJoinTimer>(params);
     std::shared_ptr<Common::Table<Common::JoinedTuple>> outputTupleRadixClustering =
@@ -155,7 +157,9 @@ Common::Configuration parseArguments(int argc, char** argv) {
                              &configuration.LoggerConfiguration.SeverityLevel)
                              ->default_value(Common::debug),
                          "LogLevel")(
-        "join", boost::program_options::value<Common::JoinAlgorithmType>(&configuration.JoinType),
+        "join",
+        boost::program_options::value<Common::JoinAlgorithmType>(&configuration.JoinType)
+            ->required(),
         "joinAlgorithmType")(
         "format",
         boost::program_options::value<Common::ResultsFormat>(&configuration.ResultFormat)
@@ -167,7 +171,13 @@ Common::Configuration parseArguments(int argc, char** argv) {
         "OutputType")("filename,f",
                       boost::program_options::value<std::string>(&configuration.Output.File.Name)
                           ->default_value("hashjoin.txt"),
-                      "Filename");
+                      "Filename")(
+        "partitions,p",
+        boost::program_options::value<size_t>(
+            &configuration.RadixClusteringConfiguration.NumberOfPartitions),
+        "NumberOfPartitions");
+
+    // TODO: We might validate combinations of parameters
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);

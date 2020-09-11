@@ -11,10 +11,6 @@
 #include "Configuration.hpp"
 #include "HashTables/SeparateChaining.hpp"
 
-#ifndef HASH_TABLE_BUCKET_SIZE
-#define HASH_TABLE_BUCKET_SIZE 3
-#endif
-
 namespace RadixClustering {
 namespace internal {
 class PartitionsInfo {
@@ -68,7 +64,7 @@ class HashJoiner {
     // tableA should be the build relation, while tableB should be probe relation
     std::shared_ptr<Common::Table<Common::JoinedTuple>> Run(
         std::shared_ptr<Common::Table<Common::Tuple>> tableA,
-        std::shared_ptr<Common::Table<Common::Tuple>> tableB, 
+        std::shared_ptr<Common::Table<Common::Tuple>> tableB,
         std::shared_ptr<Common::IHashJoinTimer> timer =
             std::make_shared<Common::NoOpHashJoinTimer>());
 
@@ -89,7 +85,8 @@ class HashJoiner {
         std::shared_ptr<Common::Table<Common::Tuple>> partitionedTableB,
         const std::pair<internal::PartitionsInfo, internal::PartitionsInfo>& partitionInfo,
         const std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>&
-            partitionConfiguration);
+            partitionConfiguration,
+        std::shared_ptr<Common::IHashJoinTimer> timer);
 
     std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>
     GetPartitioningConfiguration(std::shared_ptr<Common::Table<Common::Tuple>> tableA,
@@ -136,15 +133,15 @@ HashJoiner<HashTableFactory, HasherType>::GetPartitioningConfiguration(
     }
 
     internal::PartitioningConfiguration partitionConfigA{
-        m_configuration.NumberOfPartitions, // NumberOfPartitions,
-        numberOfWorkers,  // NumberOfWorkers;
-        batchSizeA, // BatchSize
+        m_configuration.NumberOfPartitions,  // NumberOfPartitions,
+        numberOfWorkers,                     // NumberOfWorkers;
+        batchSizeA,                          // BatchSize
     };
 
     internal::PartitioningConfiguration partitionConfigB{
-        m_configuration.NumberOfPartitions, // NumberOfPartitions,
-        numberOfWorkers,  // NumberOfWorkers;
-        batchSizeB, // BatchSize
+        m_configuration.NumberOfPartitions,  // NumberOfPartitions,
+        numberOfWorkers,                     // NumberOfWorkers;
+        batchSizeB,                          // BatchSize
     };
 
     return std::make_pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>(
@@ -167,8 +164,8 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory,
     auto partitionInfo = std::make_pair<internal::PartitionsInfo, internal::PartitionsInfo>(
         internal::PartitionsInfo{}, internal::PartitionsInfo{});
 
-    timer->SetBuildPhaseBegin();
- 
+    timer->SetPartitioningPhaseBegin();
+
     auto partitionedTableAFuture = this->Partition(tableA, partitionedTableA, partitionInfo.first,
                                                    partitionConfiguration.first);
     auto partitionedTableBFuture = this->Partition(tableB, partitionedTableB, partitionInfo.second,
@@ -183,22 +180,19 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory,
         throw partitionedTableBFuture.get().Pop();
     }
 
-    timer->SetBuildPhaseEnd();
-    timer->SetProbePhaseBegin();
+    timer->SetPartitioningPhaseEnd();
 
     auto joinedTable =
         std::make_shared<Common::Table<Common::JoinedTuple>>(Common::generate_uuid());
 
     auto joinFuture = this->Join(joinedTable, partitionedTableA, partitionedTableB, partitionInfo,
-                                 partitionConfiguration);
+                                 partitionConfiguration, timer);
 
     joinFuture.wait();
 
     if (!joinFuture.get().Empty()) {
         throw joinFuture.get().Pop();
     }
-
-    timer->SetProbePhaseEnd();
 
     return joinedTable;
 }
@@ -210,13 +204,17 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
     std::shared_ptr<Common::Table<Common::Tuple>> partitionedTableB,
     const std::pair<internal::PartitionsInfo, internal::PartitionsInfo>& partitionInfo,
     const std::pair<internal::PartitioningConfiguration, internal::PartitioningConfiguration>&
-        partitionConfiguration) {
+        partitionConfiguration,
+    std::shared_ptr<Common::IHashJoinTimer> timer) {
     auto numberOfJoinedPartitions = std::make_shared<std::atomic<size_t>>(0);
     auto numberOfJoinedTuples = std::make_shared<std::atomic<size_t>>(0);
     auto join = [this, joinedTable, partitionedTableA, partitionedTableB, &partitionConfiguration,
-                 &partitionInfo, numberOfJoinedPartitions, numberOfJoinedTuples](size_t id) {
-        LOG(m_logger, Common::SeverityLevel::info)
+                 &partitionInfo, numberOfJoinedPartitions, numberOfJoinedTuples, timer](size_t id) {
+        LOG(m_logger, Common::SeverityLevel::debug)
             << "Partition " << id << " starting join process.";
+
+        auto buildTimeSegmentMeasurer = timer->GetSegmentMeasurer();
+        auto probeTimeSegmentMeasurer = timer->GetSegmentMeasurer();
 
         size_t joined = 0;
         for (size_t partitionId = id; partitionId < partitionConfiguration.first.NumberOfPartitions;
@@ -226,11 +224,16 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
 
             auto hashTable = m_hashTableFactory.New(partitionEndA - partitionStartA);
 
+            buildTimeSegmentMeasurer->Start();
+
             // Build a hash table
             for (size_t i = partitionStartA; i != partitionEndA; i++) {
                 const Common::Tuple& tuple = (*partitionedTableA)[i];
                 hashTable->Insert(tuple.id, &tuple);
             }
+
+            buildTimeSegmentMeasurer->End();
+            probeTimeSegmentMeasurer->Start();
 
             auto [partitionStartB, partitionEndB] =
                 partitionInfo.second.GetPartitionBoundaries(partitionId);
@@ -245,15 +248,20 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             }
 
             numberOfJoinedPartitions->operator++();
+
+            probeTimeSegmentMeasurer->End();
         }
+
+        timer->SetBuildPhaseDuration(std::move(buildTimeSegmentMeasurer));
+        timer->SetProbePhaseDuration(std::move(probeTimeSegmentMeasurer));
 
         numberOfJoinedTuples->fetch_add(joined);
 
-        LOG(m_logger, Common::SeverityLevel::info)
+        LOG(m_logger, Common::SeverityLevel::debug)
             << "Partition " << id << " finished join process.";
 
         if (numberOfJoinedPartitions->load() == partitionConfiguration.first.NumberOfPartitions) {
-            LOG(m_logger, Common::SeverityLevel::info)
+            LOG(m_logger, Common::SeverityLevel::debug)
                 << "Joined  " << numberOfJoinedTuples->load() << " tuples";
         }
     };
@@ -281,7 +289,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
     // Define a task to create a temporary table containing sum of elements for each partition
     auto scanTable = [table, prefixSumTable, this, &partitionConfiguration, local_logger](
                          size_t tableStart, size_t tableEnd, size_t workerID) {
-        LOG(*local_logger, Common::SeverityLevel::info)
+        LOG(*local_logger, Common::SeverityLevel::debug)
             << "Worker " << workerID << " started scanning.";
 
         for (size_t i = tableStart; i != tableEnd; i++) {
@@ -290,7 +298,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             prefixSumTable->Increment(partition, workerID);
         }
 
-        LOG(*local_logger, Common::SeverityLevel::info)
+        LOG(*local_logger, Common::SeverityLevel::debug)
             << "Worker " << workerID << " finished scanning positions [" << tableStart << ", "
             << tableEnd << "].";
     };
@@ -302,7 +310,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
     auto createPrefixSumTable = [prefixSumTable, this, &partitionConfiguration, &partitionInfo,
                                  partitionSizes, numberOfFinishedPartitions,
                                  local_logger](size_t partitionID) {
-        LOG(*local_logger, Common::SeverityLevel::info)
+        LOG(*local_logger, Common::SeverityLevel::debug)
             << "Partition " << partitionID << " started creating prefix sum table.";
 
         size_t runningBucketSize, currentBucketSize;
@@ -324,7 +332,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             partitionInfo.ComputePartitionsBoundaries(*partitionSizes);
         }
 
-        LOG(*local_logger, Common::SeverityLevel::info)
+        LOG(*local_logger, Common::SeverityLevel::debug)
             << "Partition " << partitionID
             << " finished creating prefix sum table with size: " << runningBucketSize;
     };
@@ -334,7 +342,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
     auto partitionTable = [table, partitionedTable, prefixSumTable, this, &partitionConfiguration,
                            &partitionInfo,
                            local_logger](size_t tableStart, size_t tableEnd, size_t workerID) {
-        LOG(*local_logger, Common::SeverityLevel::info)
+        LOG(*local_logger, Common::SeverityLevel::debug)
             << "Worker " << workerID << " started partitioning table [" << tableStart << ","
             << tableEnd << "].";
 
@@ -347,7 +355,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             prefixSumTable->Increment(partition, workerID);
         }
 
-        LOG(*local_logger, Common::SeverityLevel::info)
+        LOG(*local_logger, Common::SeverityLevel::debug)
             << "Worker " << workerID << " finished partitioning table [" << tableStart << ","
             << tableEnd << "].";
     };
