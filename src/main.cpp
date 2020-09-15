@@ -16,6 +16,7 @@
 #include <thread>
 #include <utility>
 
+#include "Arguments.hpp"
 #include "Common/Configuration.hpp"
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
@@ -145,48 +146,57 @@ Common::Configuration parseArguments(int argc, char** argv) {
         "primary",
         boost::program_options::value<size_t>(&configuration.PrimaryRelationSize)
             ->default_value(1'000'000),
-        "PrimaryRelationSize")(
+        "Size of the primary relation.")(
         "secondary",
         boost::program_options::value<size_t>(&configuration.SecondaryRelationSize)
             ->default_value(20'000'000),
-        "SecondaryRelationSize")(
+        "Size of the secondary relation.")(
         "skew",
         boost::program_options::value<double>(&configuration.SkewParameter)->default_value(1.05),
-        "SkewParameter")("log",
-                         boost::program_options::value<Common::SeverityLevel>(
-                             &configuration.LoggerConfiguration.SeverityLevel)
-                             ->default_value(Common::debug),
-                         "LogLevel")(
+        "Parameter of skew for Zipf distribution used for the generation of tuples for secondary "
+        "relation.")("log",
+                     boost::program_options::value<Common::SeverityLevel>(
+                         &configuration.LoggerConfiguration.SeverityLevel)
+                         ->default_value(Common::debug, "trace"),
+                     "Logging level. One of {trace, debug, info, error, critical}.")(
         "join",
         boost::program_options::value<Common::JoinAlgorithmType>(&configuration.JoinType)
             ->required(),
-        "joinAlgorithmType")(
+        "Type of join algorithm: either no-partitioning or radix-partitioning.")(
         "format",
         boost::program_options::value<Common::ResultsFormat>(&configuration.ResultFormat)
             ->default_value(Common::ResultsFormat::JSON),
-        "OutputFormat")(
+        "Format of the output. Currently only JSON is supported.")(
         "output,o",
         boost::program_options::value<Common::OutputType>(&configuration.Output.Type)
             ->default_value(Common::OutputType::File),
-        "OutputType")("filename,f",
-                      boost::program_options::value<std::string>(&configuration.Output.File.Name)
-                          ->default_value("hashjoin.txt"),
-                      "Filename")(
+        "Type of the output. Currently only file is supported.")(
+        "filename,f",
+        boost::program_options::value<std::string>(&configuration.Output.File.Name)
+            ->default_value("hashjoin.txt"),
+        "Name of the file if output type is file.")(
         "partitions,p",
         boost::program_options::value<size_t>(
             &configuration.RadixClusteringConfiguration.NumberOfPartitions),
-        "NumberOfPartitions");
-
-    // TODO: We might want to validate combinations of parameters
+        "Number of partitions for algorithms using partitioning.");
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
 
     if (vm.count("help")) {
         std::cout << desc << "\n";
+        exit(0);
     }
 
     boost::program_options::notify(vm);
+
+    try {
+        validateParsedConfiguration(configuration, vm);
+    } catch (std::invalid_argument& e) {
+        std::cout << e.what() << "\n\n";
+        std::cout << desc << "\n";
+        exit(0);
+    }
 
     return configuration;
 }
@@ -200,10 +210,10 @@ int main(int argc, char** argv) {
     HashTables::LinearProbingFactory<TupleType, TupleSize, HasherType> hashTableFactory(
         HashTables::LinearProbingConfiguration{}, hasher);
 
-    #ifdef PHJ_USE_MIMALLOC
+#ifdef PHJ_USE_MIMALLOC
     // Ensure mimalloc library is linked
     mi_version();
-    #endif
+#endif
 
     // Parse command line arguments with configuration parameters
     Common::Configuration configuration = parseArguments(argc, argv);

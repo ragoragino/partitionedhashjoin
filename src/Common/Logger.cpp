@@ -27,6 +27,13 @@ BOOST_LOG_ATTRIBUTE_KEYWORD(tableID, "TableID", std::string)
 namespace Common {
 typedef boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend> sink_t;
 
+std::istream& operator>>(std::istream& in, SeverityLevel& obj) {
+    std::string s;
+    in >> s;
+    obj = SeverityLevelFromString(std::move(s));
+    return in;
+}
+
 std::ostream& operator<<(std::ostream& stream, SeverityLevel level) {
     static const char* strings[] = {"trace", "debug", "info", "error", "critical"};
 

@@ -59,6 +59,33 @@ class PrefixSumTable {
     std::vector<size_t> m_table;
     size_t m_numberOfPartitions;
 };
+
+// BuildAndProbeRepresentativeDurationMeasurer picks the longest run of build and probe 
+// phases from multiple workers and provides these values as representative of build and probe durations.
+// The reasoning is that the worker with the longest run of build and probe sets the lower bound on the 
+// timing of these phases together for all workers.
+class BuildAndProbeRepresentativeDurationMeasurer {
+   public:
+    BuildAndProbeRepresentativeDurationMeasurer() : m_buildDuration(0), m_probeDuration(0){};
+
+    void AddMeasurement(std::chrono::nanoseconds buildDuration,
+                        std::chrono::nanoseconds probeDuration) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (buildDuration + probeDuration > m_buildDuration + m_probeDuration) {
+            m_buildDuration = buildDuration;
+            m_probeDuration = probeDuration;
+        }
+    };
+
+    std::chrono::nanoseconds GetBuildDuration() { return m_buildDuration; };
+
+    std::chrono::nanoseconds GetProbeDuration() { return m_probeDuration; };
+
+   private:
+    std::mutex m_mutex;
+    std::chrono::nanoseconds m_buildDuration, m_probeDuration;
+};
+
 }  // namespace internal
 
 template <typename HashTableFactory, typename HasherType>
@@ -225,14 +252,12 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
     auto numberOfJoinedPartitions = std::make_shared<std::atomic<size_t>>(0);
     auto numberOfJoinedTuples = std::make_shared<std::atomic<size_t>>(0);
 
-    auto durationMutex = std::make_shared<std::mutex>();
-    auto representativeBuildDuration = std::make_shared<std::chrono::nanoseconds>(0);
-    auto representativeProbeDuration = std::make_shared<std::chrono::nanoseconds>(0);
+    auto internalDurationMeasurer =
+        std::make_shared<internal::BuildAndProbeRepresentativeDurationMeasurer>();
 
     auto join = [this, joinedTable, partitionedTableA, partitionedTableB, &partitionConfiguration,
                  &partitionInfo, numberOfJoinedPartitions, numberOfJoinedTuples,
-                 representativeBuildDuration, representativeProbeDuration, durationMutex,
-                 timer](size_t id) {
+                 internalDurationMeasurer, timer](size_t id) {
         LOG(m_logger, Common::SeverityLevel::debug)
             << "Partition " << id << " starting join process.";
 
@@ -275,13 +300,8 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             probeTimeSegmentMeasurer.End();
         }
 
-        durationMutex->lock();
-        if (buildTimeSegmentMeasurer.GetDuration() + probeTimeSegmentMeasurer.GetDuration() >
-            *representativeBuildDuration + *representativeProbeDuration) {
-            *representativeBuildDuration = buildTimeSegmentMeasurer.GetDuration();
-            *representativeProbeDuration = probeTimeSegmentMeasurer.GetDuration();
-        }
-        durationMutex->unlock();
+        internalDurationMeasurer->AddMeasurement(buildTimeSegmentMeasurer.GetDuration(),
+                                                 probeTimeSegmentMeasurer.GetDuration());
 
         numberOfJoinedTuples->fetch_add(joined);
 
@@ -289,8 +309,8 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             << "Partition " << id << " finished join process.";
 
         if (numberOfJoinedPartitions->load() == partitionConfiguration.first.NumberOfPartitions) {
-            timer->SetBuildPhaseDuration(*representativeBuildDuration);
-            timer->SetProbePhaseDuration(*representativeProbeDuration);
+            timer->SetBuildPhaseDuration(internalDurationMeasurer->GetBuildDuration());
+            timer->SetProbePhaseDuration(internalDurationMeasurer->GetProbeDuration());
 
             LOG(m_logger, Common::SeverityLevel::debug)
                 << "Joined  " << numberOfJoinedTuples->load() << " tuples";

@@ -5,6 +5,7 @@ add_library(phjoinlib STATIC
 	"Common/Random.cpp"
 	"Common/Allocator.cpp" 
 	"Common/IThreadPool.cpp" 
+	"Common/Configuration.cpp"
 	 
 	"DataGenerator/Zipf.cpp" 
 	"DataGenerator/Sequential.cpp"
@@ -17,7 +18,7 @@ target_link_libraries(phjoinlib PUBLIC ${Boost_LIBRARIES})
 target_link_libraries(phjoinlib PUBLIC xxHash::xxhash)
 target_link_libraries(phjoinlib PUBLIC mimalloc)
 
-add_executable(phjoin main.cpp)
+add_executable(phjoin "main.cpp")
 target_link_libraries(phjoin PRIVATE phjoinlib)
 if(PHJ_USE_MIMALLOC)
 	target_compile_definitions(phjoin PRIVATE PHJ_USE_MIMALLOC)

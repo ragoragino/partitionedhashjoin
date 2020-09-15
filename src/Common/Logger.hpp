@@ -7,6 +7,8 @@
 
 namespace Common {
 enum SeverityLevel { trace, debug, info, error, critical };
+ 
+std::istream& operator>>(std::istream& in, SeverityLevel& obj);
 
 SeverityLevel SeverityLevelFromString(const std::string& level);
 
