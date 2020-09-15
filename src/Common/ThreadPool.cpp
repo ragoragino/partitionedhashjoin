@@ -34,9 +34,17 @@ void ThreadPool::Stop() {
 }
 
 Pipeline::Pipeline(std::shared_ptr<IThreadPool> thread_pool)
-    : m_idCounter(0), m_finishedBatches(0), m_failed(false), m_threadPool(thread_pool) {}
+    : m_idCounter(0),
+      m_finishedBatches(0),
+      m_failed(false),
+      m_started(false),
+      m_threadPool(thread_pool) {}
 
 size_t Pipeline::Add(std::vector<std::function<void()>>&& f) {
+    if (m_started) {
+        throw std::runtime_error("Pipeline::Add: Pipeline has already been started.");
+    }
+
     size_t id = m_idCounter++;
 
     std::vector<std::function<void()>> tasks{};
@@ -56,13 +64,18 @@ size_t Pipeline::Add(std::vector<std::function<void()>>&& f) {
             }));
     }
 
-    m_counters[id] = tasks.size(); 
+    m_counters[id] = tasks.size();
     m_tasks[id] = std::move(tasks);
 
     return id;
 }
 
 std::future<TasksErrorHolder> Pipeline::Start() {
+    if (m_started) {
+        throw std::runtime_error("Pipeline::Start: Pipeline has already been started.");
+    }
+
+    m_started = true;
     m_tasksIterator = m_tasks.begin();
     return m_globalPromise.get_future();
 }
@@ -74,7 +87,7 @@ std::vector<std::function<void()>> Pipeline::Next() {
 
 std::vector<std::function<void()>> Pipeline::next() {
     if (m_tasksIterator == m_tasks.end()) {
-        throw std::runtime_error("Cannot call next on empty pipeline.");
+        throw std::runtime_error("Pipeline::next: Cannot call next on empty pipeline.");
     }
 
     std::vector<std::function<void()>> tasks = m_tasksIterator->second;
@@ -93,26 +106,26 @@ void Pipeline::finished(size_t id) {
         return;
     }
 
-    size_t numberOfSpawnedTasks = std::distance(m_tasks.begin(), m_tasksIterator);
+    size_t numberOfSpawnedBatches = std::distance(m_tasks.begin(), m_tasksIterator);
 
-    // If a task have failed before, we just check whether we have processed all the tasks 
-    // spawned before the failure. After the failure, no new tasks are spawned, therefore we can safely
-    // set the promise as no new tasks will ever finish.
+    // If a task has failed before, we just check whether we have processed all the tasks
+    // spawned before the failure. After the failure, no new tasks are spawned, therefore we can
+    // safely set the promise as no new tasks will ever finish.
     if (m_failed) {
-        if (m_finishedBatches == numberOfSpawnedTasks) {
+        if (m_finishedBatches == numberOfSpawnedBatches) {
             m_globalPromise.set_value(m_exceptions);
         }
 
         return;
     }
 
-    // If a task have failed before, we set the failure flag and check whether we have
+    // If a task has not failed before, we set the failure flag and check whether we have
     // processed all the previously spawned tasks. If so, we can safely
     // set the promise as no new tasks will ever finish.
     if (!m_exceptions.Empty()) {
         m_failed = true;
 
-        if (m_finishedBatches == numberOfSpawnedTasks) {
+        if (m_finishedBatches == numberOfSpawnedBatches) {
             m_globalPromise.set_value(m_exceptions);
         }
 
@@ -122,7 +135,7 @@ void Pipeline::finished(size_t id) {
     // If we have not spawned all the tasks, we now spawn a new batch
     // If we have processed all the tasks, we set the promise as we have reached
     // the end of the pipeline
-    if (numberOfSpawnedTasks != m_tasks.size()) {
+    if (numberOfSpawnedBatches != m_tasks.size()) {
         auto tasks = this->next();
         m_threadPool->Push(std::move(tasks));
         return;
@@ -140,7 +153,7 @@ WorkManager::WorkManager(std::vector<std::function<void()>>&& funcs)
 std::vector<std::function<void()>> WorkManager::GetTasks() {
     if (m_work.size() == 0) {
         throw std::invalid_argument(
-            "The size of work to be managed is zero."
+            "WorkManager::GetTasks: The size of work to be managed is zero."
             "Either the object was instantiated with an empty vector or GetTasks got called "
             "multiple times.");
     }
@@ -178,13 +191,13 @@ void WorkManager::finished() {
 WorkPipe::WorkPipe() : m_stopped(false) {}
 
 std::future<TasksErrorHolder> WorkPipe::Push(std::function<void()>&& f) {
-    std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     if (m_stopped) {
-        throw std::runtime_error("Cannot push to WorkPipe because it had already been stopped!");
+        throw std::runtime_error(
+            "WorkPipe::Push: Cannot push to WorkPipe because it has already been stopped!");
     }
 
-    // TODO: Do not use WorkManager and optimize for 1-task case?
     auto workManager =
         std::make_shared<WorkManager>(std::vector<std::function<void()>>{std::move(f)});
 
@@ -199,10 +212,11 @@ std::future<TasksErrorHolder> WorkPipe::Push(std::function<void()>&& f) {
 }
 
 std::future<TasksErrorHolder> WorkPipe::Push(std::vector<std::function<void()>>&& f) {
-    std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     if (m_stopped) {
-        throw std::runtime_error("Cannot push to WorkPipe because it had already been stopped!");
+        throw std::runtime_error(
+            "WorkPipe::Push: Cannot push to WorkPipe because it has already been stopped!");
     }
 
     auto workManager = std::make_shared<WorkManager>(std::move(f));
@@ -218,10 +232,11 @@ std::future<TasksErrorHolder> WorkPipe::Push(std::vector<std::function<void()>>&
 }
 
 std::future<TasksErrorHolder> WorkPipe::Push(std::shared_ptr<IPipeline> pipeline) {
-    std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     if (m_stopped) {
-        throw std::runtime_error("Cannot push to WorkPipe because it had already been stopped!");
+        throw std::runtime_error(
+            "WorkPipe::Push: Cannot push to WorkPipe because it has already been stopped!");
     }
 
     std::future<TasksErrorHolder> future = pipeline->Start();
@@ -237,7 +252,7 @@ std::future<TasksErrorHolder> WorkPipe::Push(std::shared_ptr<IPipeline> pipeline
 }
 
 std::tuple<bool, std::function<void()>> WorkPipe::Wait(size_t id) {
-    std::unique_lock<std::mutex> lock(m_global_workqueue_mutex);
+    std::unique_lock<std::mutex> lock(m_mutex);
 
     if (!m_global_workqueue.empty()) {
         std::function<void()> element(std::move(m_global_workqueue.front()));
@@ -259,7 +274,7 @@ std::tuple<bool, std::function<void()>> WorkPipe::Wait(size_t id) {
 }
 
 void WorkPipe::Stop() {
-    std::lock_guard<std::mutex> lock(m_global_workqueue_mutex);
+    std::lock_guard<std::mutex> lock(m_mutex);
 
     m_stopped = true;
 
@@ -270,7 +285,7 @@ void Worker::Start(std::shared_ptr<WorkPipe> workPipe) {
     std::lock_guard<std::mutex> lock(m_threadMutex);
 
     if (m_thread.joinable()) {
-        throw std::runtime_error("Worker thread has been already initialized!");
+        throw std::runtime_error("Worker::Start: Worker thread has been already initialized!");
     }
 
     m_thread = std::thread(&Worker::Run, this, workPipe);
@@ -278,8 +293,6 @@ void Worker::Start(std::shared_ptr<WorkPipe> workPipe) {
 
 void Worker::Run(std::shared_ptr<WorkPipe> workPipe) {
     auto threadID = std::hash<std::thread::id>{}(std::this_thread::get_id());
-
-    auto logger = GetNewLogger();
 
     while (true) {
         auto work = workPipe->Wait(threadID);
@@ -297,7 +310,8 @@ void Worker::Run(std::shared_ptr<WorkPipe> workPipe) {
 void Worker::WaitForFinish() {
     if (!m_thread.joinable()) {
         throw std::runtime_error(
-            "Cannot wait for finish, because worker thread has never been initialized!");
+            "Worker::WaitForFinish: Cannot wait for finish, because worker thread has never been "
+            "initialized!");
     }
 
     m_thread.join();

@@ -1,21 +1,20 @@
 #include "Sequential.hpp"
 
-#ifndef MIN_BATCH_SIZE
-#define MIN_BATCH_SIZE 10000
-#endif
+#include <cmath>
 
 namespace DataGenerator {
 std::future<Common::TasksErrorHolder> Sequential::FillTable(
     std::shared_ptr<Common::IThreadPool> threadPool,
-                                        std::shared_ptr<Common::Table<Common::Tuple>> table,
-                                       const Parameters& parameters) {
+    std::shared_ptr<Common::Table<Common::Tuple>> table, const Parameters& parameters) {
     const size_t size = table->GetSize();
     size_t numberOfWorkers = threadPool->GetNumberOfWorkers();
-    size_t batchSize = static_cast<size_t>(size / numberOfWorkers);
+    size_t batchSize =
+        static_cast<size_t>(static_cast<double>(size) / static_cast<double>(numberOfWorkers));
 
-    if (batchSize < MIN_BATCH_SIZE) {
-        numberOfWorkers = 1;
-        batchSize = size;
+    if (batchSize < parameters.minBatchSize) {
+        numberOfWorkers = static_cast<size_t>(
+            std::ceil(static_cast<double>(size) / static_cast<double>(parameters.minBatchSize)));
+        batchSize = parameters.minBatchSize;
     }
 
     auto fillBatch = [&table](size_t tableStart, size_t tableEnd, int64_t indexStart) {

@@ -58,8 +58,7 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
     std::shared_ptr<Common::IHashJoinTimer> timer) {
     size_t numberOfWorkers = m_threadPool->GetNumberOfWorkers();
 
-    LOG(m_logger, Common::debug) << "Starting hash partitioning with " << numberOfWorkers
-                                 << " number of workers.";
+    LOG(m_logger, Common::debug) << "Starting hash partitioning.";
 
     timer->SetBuildPhaseBegin();
     auto hashTable = this->Build(tableA, numberOfWorkers);
@@ -68,6 +67,8 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
     timer->SetProbePhaseBegin();
     auto joinedTable = this->Probe(hashTable, tableB, numberOfWorkers);
     timer->SetProbePhaseEnd();
+
+    LOG(m_logger, Common::debug) << "Finished hash partitioning.";
 
     return joinedTable;
 }
@@ -80,11 +81,13 @@ HashJoiner<HashTableFactory>::Build(std::shared_ptr<Common::Table<Common::Tuple>
 
     auto hashTable = m_hashTableFactory.New(tableASize);
 
-    size_t batchSize = static_cast<size_t>(tableASize / numberOfWorkers);
+    size_t batchSize =
+        static_cast<size_t>(static_cast<double>(tableASize) / static_cast<double>(numberOfWorkers));
 
     if (batchSize < m_configuration.MinBatchSize) {
-        numberOfWorkers = 1;
-        batchSize = tableASize;
+        numberOfWorkers = static_cast<size_t>(std::ceil(
+            static_cast<double>(tableASize) / static_cast<double>(m_configuration.MinBatchSize)));
+        batchSize = m_configuration.MinBatchSize;
     }
 
     auto buildHashTable = [&tableA, hashTable](size_t tableStart, size_t tableEnd) {
@@ -117,6 +120,8 @@ HashJoiner<HashTableFactory>::Build(std::shared_ptr<Common::Table<Common::Tuple>
         throw createHashTableFuture.get().Pop();
     }
 
+    LOG(m_logger, Common::debug) << "Finished build phase.";
+
     return hashTable;
 }
 
@@ -125,12 +130,14 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
     std::shared_ptr<HashTableType> hashTable, std::shared_ptr<Common::Table<Common::Tuple>> tableB,
     size_t numberOfWorkers) {
     const size_t tableBSize = tableB->GetSize();
-
-    size_t batchSize = static_cast<size_t>(tableBSize / numberOfWorkers);
+    
+    size_t batchSize =
+        static_cast<size_t>(static_cast<double>(tableBSize) / static_cast<double>(numberOfWorkers));
 
     if (batchSize < m_configuration.MinBatchSize) {
-        numberOfWorkers = 1;
-        batchSize = tableBSize;
+        numberOfWorkers = static_cast<size_t>(std::ceil(
+            static_cast<double>(tableBSize) / static_cast<double>(m_configuration.MinBatchSize)));
+        batchSize = m_configuration.MinBatchSize;
     }
 
     std::atomic<size_t> globalCounter(0);
@@ -171,6 +178,8 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
     if (!probeHashTableFuture.get().Empty()) {
         throw probeHashTableFuture.get().Pop();
     }
+
+    LOG(m_logger, Common::debug) << "Finished probe phase.";
 
     LOG(m_logger, Common::debug) << "Joined " << globalCounter.load() << " tuples.";
 

@@ -1,4 +1,6 @@
-// #include <mimalloc.h>
+#ifdef PHJ_USE_MIMALLOC
+#include <mimalloc.h>
+#endif
 
 #include <boost/program_options.hpp>
 #include <boost/thread/thread.hpp>
@@ -17,8 +19,6 @@
 #include "Common/Configuration.hpp"
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
-#include "Common/ModuloHasher.hpp"
-#include "Common/MurmurHasher.hpp"
 #include "Common/Random.hpp"
 #include "Common/Table.hpp"
 #include "Common/TestResults.hpp"
@@ -177,7 +177,7 @@ Common::Configuration parseArguments(int argc, char** argv) {
             &configuration.RadixClusteringConfiguration.NumberOfPartitions),
         "NumberOfPartitions");
 
-    // TODO: We might validate combinations of parameters
+    // TODO: We might want to validate combinations of parameters
 
     boost::program_options::variables_map vm;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
@@ -198,9 +198,12 @@ int main(int argc, char** argv) {
 
     HasherType hasher{};
     HashTables::LinearProbingFactory<TupleType, TupleSize, HasherType> hashTableFactory(
-        HashTables::LinearProbingConfiguration{0.75}, hasher);
+        HashTables::LinearProbingConfiguration{}, hasher);
 
-    // mi_version();  // ensure mimalloc library is linked
+    #ifdef PHJ_USE_MIMALLOC
+    // Ensure mimalloc library is linked
+    mi_version();
+    #endif
 
     // Parse command line arguments with configuration parameters
     Common::Configuration configuration = parseArguments(argc, argv);

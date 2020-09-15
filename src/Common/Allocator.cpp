@@ -3,4 +3,4 @@ This source file just includes overrides of new and delete operators from mimall
 See https://github.com/microsoft/mimalloc.
 */
 
-// #include "mimalloc-new-delete.h"
+#include "mimalloc-new-delete.h"

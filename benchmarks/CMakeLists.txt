@@ -1,5 +1,0 @@
-add_executable(phjoinbench main.cpp)
-target_compile_features(phjoinbench PRIVATE cxx_std_17)
-target_include_directories(phjoinbench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(phjoinbench PRIVATE benchmark::benchmark)
-target_link_libraries(phjoinbench PRIVATE phjoinlib)

@@ -144,7 +144,7 @@ inline void validate(boost::any& v, const std::vector<std::string>& values, Outp
             "Invalid logger configuration specification");
     }
 
-    v = GetResultsFormatFromString(values.at(0));
+    v = GetOutputTypeFromString(values.at(0));
 }
 }
 

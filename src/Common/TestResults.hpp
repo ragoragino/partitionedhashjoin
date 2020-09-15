@@ -89,7 +89,7 @@ class HashJoinTimingResult {
 
 class ITimeSegmentMeasurer {
    public:
-    virtual std::chrono::nanoseconds GetSegmentDuration() = 0;
+    virtual std::chrono::nanoseconds GetDuration() = 0;
     virtual void Start() = 0;
     virtual void End() = 0;
     virtual ~ITimeSegmentMeasurer() = default;
@@ -97,9 +97,12 @@ class ITimeSegmentMeasurer {
 
 class TimeSegmentMeasurer : public ITimeSegmentMeasurer {
    public:
-    TimeSegmentMeasurer() {}
-    std::chrono::nanoseconds GetSegmentDuration() { return m_duration; }
+    TimeSegmentMeasurer() : m_duration(0) {}
+    std::chrono::nanoseconds GetDuration() { return m_duration; }
     void Start() {
+        if (m_started) {
+            std::runtime_error("TimeSegmentMeasurer::Start: Start has already been called without no subsequent call to End.");
+        }
         m_start = std::chrono::steady_clock::now();
         m_started = true;
     };
@@ -133,11 +136,10 @@ class IHashJoinTimer {
     virtual void SetProbePhaseBegin() = 0;
     virtual void SetProbePhaseEnd() = 0;
 
-    // discontinuous time segment (thread-safe)
-    virtual std::unique_ptr<ITimeSegmentMeasurer> GetSegmentMeasurer() = 0;
-    virtual void SetBuildPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) = 0;
-    virtual void SetProbePhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) = 0;
-    virtual void SetPartitionPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) = 0;
+    // discontinuous time segments (thread-safe)
+    virtual void SetBuildPhaseDuration(std::chrono::nanoseconds duration) = 0;
+    virtual void SetProbePhaseDuration(std::chrono::nanoseconds duration) = 0;
+    virtual void SetPartitionPhaseDuration(std::chrono::nanoseconds durationr) = 0;
 
     virtual HashJoinTimingResult GetResult() = 0;
 
@@ -153,12 +155,11 @@ class NoOpHashJoinTimer final : public IHashJoinTimer {
     void SetProbePhaseBegin(){};
     void SetProbePhaseEnd(){};
 
-    std::unique_ptr<ITimeSegmentMeasurer> GetSegmentMeasurer() { return nullptr; };
-    void SetBuildPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer){};
-    void SetProbePhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer){};
-    void SetPartitionPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer){};
+    void SetBuildPhaseDuration(std::chrono::nanoseconds duration){};
+    void SetProbePhaseDuration(std::chrono::nanoseconds duration){};
+    void SetPartitionPhaseDuration(std::chrono::nanoseconds duration){};
 
-    HashJoinTimingResult GetResult(){};
+    HashJoinTimingResult GetResult() { return HashJoinTimingResult(); };
 };
 
 class HashJoinTimer final : public IHashJoinTimer {
@@ -204,32 +205,30 @@ class HashJoinTimer final : public IHashJoinTimer {
         return std::make_unique<TimeSegmentMeasurer>();
     };
 
-    void SetBuildPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+    void SetBuildPhaseDuration(std::chrono::nanoseconds duration) {
         if (m_buildTimeSet) {
             std::runtime_error(
                 "HashJoinTimer::SetBuildPhaseDuration: build time has been already "
                 "measured.");
         }
-        m_buildTime = measurer->GetSegmentDuration();
+        m_buildTime = duration;
         m_buildTimeSet = true;
     };
-    void SetProbePhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+    void SetProbePhaseDuration(std::chrono::nanoseconds duration) {
         if (m_probeTimeSet) {
             std::runtime_error(
                 "HashJoinTimer::SetProbePhaseDuration: probe time has been already measured.");
         }
-        m_probeTime = measurer->GetSegmentDuration();
+        m_probeTime = duration;
         m_probeTimeSet = true;
     };
-    void SetPartitionPhaseDuration(std::unique_ptr<ITimeSegmentMeasurer>&& measurer) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+    void SetPartitionPhaseDuration(std::chrono::nanoseconds duration) {
         if (m_partitioningTimeSet) {
             std::runtime_error(
-                "HashJoinTimer::SetPartitionPhaseDuration: partitioning time has been already measured.");
+                "HashJoinTimer::SetPartitionPhaseDuration: partitioning time has been already "
+                "measured.");
         }
-        m_partitioningTime = measurer->GetSegmentDuration();
+        m_partitioningTime = duration;
         m_partitioningTimeSet = true;
     };
 
@@ -238,7 +237,6 @@ class HashJoinTimer final : public IHashJoinTimer {
     };
 
    private:
-    std::mutex m_mutex;
     bool m_buildTimeSet, m_probeTimeSet, m_partitioningTimeSet;
     std::chrono::nanoseconds m_buildTime, m_probeTime, m_partitioningTime;
     std::chrono::time_point<std::chrono::steady_clock> m_buildStart, m_probeStart,

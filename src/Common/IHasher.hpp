@@ -1,9 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
-#include <future>
-#include <vector>
 
 namespace Common {
 class IHasher {

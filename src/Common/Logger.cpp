@@ -79,7 +79,7 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
                                             default_log_owner->configuration.SeverityLevel);
         default_log_owner->sink->set_formatter(
             boost::log::expressions::stream
-            << "(" << component << ") "
+            << component
             << "(" << severity << ") "
             << "(" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S.%f") << ") "
             << tableID
@@ -90,13 +90,13 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
                                                       boost::log::attributes::local_clock{});
     } else {
         throw std::runtime_error(
-            "Cannot continue with initializing logger, because it is already initialized.");
+            "InitializeLogger: Cannot continue with initializing logger, because it is already initialized.");
     }
 }
 
 LoggerType GetNewLogger() {
     if (!default_log_owner) {
-        throw std::runtime_error("Cannot create new logger. Logger was not initialized.");
+        throw std::runtime_error("GetNewLogger: Cannot create new logger. Logger was not initialized.");
     }
 
     return LoggerType{};
@@ -107,7 +107,9 @@ std::shared_ptr<LoggerType> GetScopedLogger(LoggerType logger) {
 }
 
 void AddComponentAttributeToLogger(LoggerType& logger, std::string componentName) {
-    logger.add_attribute("Component", boost::log::attributes::constant<std::string>(componentName));
+    std::string componentWrapped = "(" + componentName + ") ";
+    logger.add_attribute("Component",
+                         boost::log::attributes::constant<std::string>(componentWrapped));
 }
 
 void AddTableIDToLogger(LoggerType& logger, std::string tableID) {

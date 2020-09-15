@@ -15,10 +15,13 @@ class Pipeline : public IPipeline, public std::enable_shared_from_this<Pipeline>
    public:
     Pipeline(std::shared_ptr<IThreadPool> threadPool);
 
+    // not thread-safe
     virtual size_t Add(std::vector<std::function<void()>>&& f) override;
 
+    // thread-safe
     virtual std::vector<std::function<void()>> Next() override;
 
+    // not thread-safe
     virtual std::future<TasksErrorHolder> Start() override;
 
    private:
@@ -26,13 +29,14 @@ class Pipeline : public IPipeline, public std::enable_shared_from_this<Pipeline>
 
     void finished(size_t id);
 
+    bool m_started;
     bool m_failed;
     std::mutex m_mutex;
     TasksErrorHolder m_exceptions;
 
     size_t m_idCounter;
     std::map<size_t, std::vector<std::function<void()>>> m_tasks;
-    std::map<size_t, std::size_t> m_counters;
+    std::map<size_t, size_t> m_counters;
     std::promise<TasksErrorHolder> m_globalPromise;
     size_t m_finishedBatches;
 
@@ -70,8 +74,8 @@ class WorkPipe {
    private:
     std::condition_variable m_condition_variable;
     std::queue<std::function<void()>> m_global_workqueue;
-    std::mutex m_global_workqueue_mutex;
-    bool m_stopped;  // it also protected by m_global_workqueue
+    std::mutex m_mutex;
+    bool m_stopped; 
 };
 
 // Worker is the owner of a thread and executes tasks from WorkPipe

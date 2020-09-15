@@ -13,9 +13,10 @@ namespace DataGenerator {
 class Zipf {
    public:
     struct Parameters {
-        const double alpha;
-        const std::pair<size_t, size_t> range;
+        double alpha;
+        std::pair<size_t, size_t> range;
         std::shared_ptr<Common::IRandomNumberGeneratorFactory> generatorFactory;
+        size_t minBatchSize = 10000;
     };
 
     static std::future<Common::TasksErrorHolder> FillTable(

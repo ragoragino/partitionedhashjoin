@@ -21,7 +21,7 @@ namespace LinearProbing {
 template <typename Value, size_t N>
 class alignas(64) Bucket {
    public:
-    explicit Bucket() : m_freePosition(0) {}
+    Bucket() : m_freePosition(0) {}
 
     Bucket(int64_t key, const Value* tuple) : m_freePosition(1) {
         m_keys[0] = key;
@@ -107,7 +107,7 @@ class LinearProbingHashTable {
                       [](std::atomic_flag& latch) { latch.clear(); });
 
         if (numberOfObjects <= 0) {
-            throw std::invalid_argument("numberOfObjects must be greater than zero.");
+            throw std::invalid_argument("LinearProbingHashTable::LinearProbingHashTable: numberOfObjects must be greater than zero.");
         }
     }
 

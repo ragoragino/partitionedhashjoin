@@ -11,7 +11,8 @@ namespace DataGenerator {
 class Sequential {
    public:
     struct Parameters {
-        const int64_t start;
+        int64_t start;
+        size_t minBatchSize = 10000;
     };
 
     static std::future<Common::TasksErrorHolder> FillTable(

@@ -1,38 +1,32 @@
 #include "Zipf.hpp"
 
-#include <math.h>
+#include <cmath>
 
 #include <cstdint>
 #include <future>
 #include <memory>
+#include <random>
 #include <sstream>
 #include <vector>
-#include <random>
-
-#ifndef MIN_BATCH_SIZE
-#define MIN_BATCH_SIZE 10000
-#endif
-
-#ifndef ERROR_DIFFERENTIAL
-#define ERROR_DIFFERENTIAL 0.01
-#endif
 
 namespace DataGenerator {
 
 // https://medium.com/@jasoncrease/rejection-sampling-the-zipf-distribution-6b359792cffa
 uint64_t Zipf::generate(double alpha, uint64_t cardinality,
                         std::shared_ptr<Common::IRandomNumberGenerator> generator) {
+    static constexpr double errorDifferential = 0.01;
+
     if (alpha < 0.01) {
         throw std::invalid_argument("Skew parameter must be greater than 0.01.");
     }
 
-    double skewDifferential = 1.001 - alpha; 
-    if (double diff = 1.0 - alpha; abs(diff) < ERROR_DIFFERENTIAL) { 
-        skewDifferential = ERROR_DIFFERENTIAL * ((diff < 0) ? 1 : -1);
+    double skewDifferential = 1.001 - alpha;
+    if (double diff = 1.0 - alpha; std::abs(diff) < errorDifferential) {
+        skewDifferential = errorDifferential * ((diff < 0) ? 1 : -1);
         alpha = 1.0 - skewDifferential;
     }
 
-    double normalizationConstant = (pow(cardinality, skewDifferential) - alpha) / skewDifferential;
+    double normalizationConstant = (std::pow(cardinality, skewDifferential) - alpha) / skewDifferential;
 
     while (true) {
         double uniformRandom1 = generator->Next();
@@ -51,11 +45,9 @@ uint64_t Zipf::generate(double alpha, uint64_t cardinality,
         double sample = floor(invertedCDFSamplingFunc + 1);
         double densityOriginalFunc = pow(sample, -alpha);
         double densitySamplingFunc =
-            sample <= 1.0
-                ? 1.0 / normalizationConstant
-                : pow(invertedCDFSamplingFunc, -alpha) / normalizationConstant;
-        double densitiesRatio =
-            densityOriginalFunc / (densitySamplingFunc * normalizationConstant);
+            sample <= 1.0 ? 1.0 / normalizationConstant
+                          : pow(invertedCDFSamplingFunc, -alpha) / normalizationConstant;
+        double densitiesRatio = densityOriginalFunc / (densitySamplingFunc * normalizationConstant);
 
         if (uniformRandom2 < densitiesRatio) {
             return static_cast<uint64_t>(sample);
@@ -65,8 +57,7 @@ uint64_t Zipf::generate(double alpha, uint64_t cardinality,
 
 std::future<Common::TasksErrorHolder> Zipf::FillTable(
     std::shared_ptr<Common::IThreadPool> threadPool,
-                                  std::shared_ptr<Common::Table<Common::Tuple>> table,
-                                 const Parameters& parameters) {
+    std::shared_ptr<Common::Table<Common::Tuple>> table, const Parameters& parameters) {
     if (parameters.range.first >= parameters.range.second) {
         std::ostringstream errorMessage;
         errorMessage << "Range for Zipf generation is incorrectly specified: ["
@@ -77,11 +68,13 @@ std::future<Common::TasksErrorHolder> Zipf::FillTable(
 
     const size_t size = table->GetSize();
     size_t numberOfWorkers = threadPool->GetNumberOfWorkers();
-    size_t batchSize = static_cast<size_t>(size / numberOfWorkers);
+    size_t batchSize =
+        static_cast<size_t>(static_cast<double>(size) / static_cast<double>(numberOfWorkers));
 
-    if (batchSize < MIN_BATCH_SIZE) {
-        numberOfWorkers = 1;
-        batchSize = size;
+    if (batchSize < parameters.minBatchSize) {
+        numberOfWorkers = static_cast<size_t>(
+            std::ceil(static_cast<double>(size) / static_cast<double>(parameters.minBatchSize)));
+        batchSize = parameters.minBatchSize;
     }
 
     // We are doing closed range sampling, i.e. [x, y]
@@ -90,10 +83,10 @@ std::future<Common::TasksErrorHolder> Zipf::FillTable(
         parameters.range.first - 1;  // [1, cardinality] is the sampling range of zip function
 
     auto fillBatch = [&table, &parameters, cardinality, correction](size_t start, size_t end) {
-        std::shared_ptr<Common::IRandomNumberGenerator> generator = parameters.generatorFactory->GetNewGenerator();
+        auto generator = parameters.generatorFactory->GetNewGenerator();
 
+        // TODO: Probably could call zipf for a batch of values
         for (size_t i = start; i != end; i++) {
-            // TODO: Probably call zipf for a batch of values?
             (*table)[i].id = Zipf::generate(parameters.alpha, cardinality, generator) + correction;
             (*table)[i].payload = i;  // TODO: Maybe choose proper payload
         }
