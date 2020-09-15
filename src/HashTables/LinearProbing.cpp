@@ -10,7 +10,8 @@ size_t getNumberOfBuckets(const LinearProbingConfiguration& configuration, size_
 
     if (numberOfBuckets < 1) {
         throw std::runtime_error(
-            "getNumberOfBuckets: Cannot allocate less than 1 bucket for a linear probing hash table.");
+            "getNumberOfBuckets: Cannot allocate less than 1 bucket for a linear probing hash "
+            "table.");
     }
 
     return numberOfBuckets;

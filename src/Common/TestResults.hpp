@@ -101,7 +101,9 @@ class TimeSegmentMeasurer : public ITimeSegmentMeasurer {
     std::chrono::nanoseconds GetDuration() { return m_duration; }
     void Start() {
         if (m_started) {
-            std::runtime_error("TimeSegmentMeasurer::Start: Start has already been called without no subsequent call to End.");
+            std::runtime_error(
+                "TimeSegmentMeasurer::Start: Start has already been called without no subsequent "
+                "call to End.");
         }
         m_start = std::chrono::steady_clock::now();
         m_started = true;

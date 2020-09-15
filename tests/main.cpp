@@ -1,9 +1,8 @@
-#include "gtest/gtest.h"
+#include <mimalloc.h>
 
 #include "DataGenerator/ZipfTest.hpp"
 #include "NoPartitioningHashJoin/HashTableTest.hpp"
-
-#include <mimalloc.h>
+#include "gtest/gtest.h"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

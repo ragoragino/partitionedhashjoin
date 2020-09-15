@@ -9,7 +9,8 @@ void TasksErrorHolder::Push(std::exception& e) { m_exceptions.push_back(e); }
 
 std::exception TasksErrorHolder::Pop() {
     if (m_exceptions.empty()) {
-        throw std::out_of_range("TasksErrorHolder::Pop: No exception has been pushed to the error holder.");
+        throw std::out_of_range(
+            "TasksErrorHolder::Pop: No exception has been pushed to the error holder.");
     }
 
     std::exception e = m_exceptions.back();

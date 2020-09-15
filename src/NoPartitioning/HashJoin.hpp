@@ -5,9 +5,9 @@
 
 #include "Common/IHasher.hpp"
 #include "Common/IThreadPool.hpp"
-#include "Common/TestResults.hpp"
 #include "Common/Logger.hpp"
 #include "Common/Table.hpp"
+#include "Common/TestResults.hpp"
 #include "Configuration.hpp"
 
 namespace NoPartitioning {
@@ -130,7 +130,7 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
     std::shared_ptr<HashTableType> hashTable, std::shared_ptr<Common::Table<Common::Tuple>> tableB,
     size_t numberOfWorkers) {
     const size_t tableBSize = tableB->GetSize();
-    
+
     size_t batchSize =
         static_cast<size_t>(static_cast<double>(tableBSize) / static_cast<double>(numberOfWorkers));
 

@@ -7,7 +7,7 @@
 class ZipfGeneratorTester : public DataGenerator::Zipf {
    public:
     uint64_t generate(double alpha, uint64_t cardinality,
-                            std::shared_ptr<Common::IRandomNumberGenerator> generator) {
+                      std::shared_ptr<Common::IRandomNumberGenerator> generator) {
         return DataGenerator::Zipf::generate(alpha, cardinality, generator);
     }
 };

@@ -21,8 +21,7 @@ class Zipf {
 
     static std::future<Common::TasksErrorHolder> FillTable(
         std::shared_ptr<Common::IThreadPool> threadPool,
-                                       std::shared_ptr<Common::Table<Common::Tuple>> table,
-                                       const Parameters& parameters);
+        std::shared_ptr<Common::Table<Common::Tuple>> table, const Parameters& parameters);
 
    protected:
     static uint64_t generate(double alpha, uint64_t cardinality,

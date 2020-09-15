@@ -60,10 +60,10 @@ class PrefixSumTable {
     size_t m_numberOfPartitions;
 };
 
-// BuildAndProbeRepresentativeDurationMeasurer picks the longest run of build and probe 
-// phases from multiple workers and provides these values as representative of build and probe durations.
-// The reasoning is that the worker with the longest run of build and probe sets the lower bound on the 
-// timing of these phases together for all workers.
+// BuildAndProbeRepresentativeDurationMeasurer picks the longest run of build and probe
+// phases from multiple workers and provides these values as representative of build and probe
+// durations. The reasoning is that the worker with the longest run of build and probe sets the
+// lower bound on the timing of these phases together for all workers.
 class BuildAndProbeRepresentativeDurationMeasurer {
    public:
     BuildAndProbeRepresentativeDurationMeasurer() : m_buildDuration(0), m_probeDuration(0){};

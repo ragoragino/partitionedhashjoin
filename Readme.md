@@ -51,5 +51,5 @@ TODO
 
 ## Improvements
 - add support for Linux builds
-- add support for cpu cache misses measuring
+- add support for cpu cache misses measurements
 - add support for GetAll (i.e. non unique keys)

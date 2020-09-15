@@ -1,7 +1,6 @@
 #include "Zipf.hpp"
 
 #include <cmath>
-
 #include <cstdint>
 #include <future>
 #include <memory>
@@ -26,7 +25,8 @@ uint64_t Zipf::generate(double alpha, uint64_t cardinality,
         alpha = 1.0 - skewDifferential;
     }
 
-    double normalizationConstant = (std::pow(cardinality, skewDifferential) - alpha) / skewDifferential;
+    double normalizationConstant =
+        (std::pow(cardinality, skewDifferential) - alpha) / skewDifferential;
 
     while (true) {
         double uniformRandom1 = generator->Next();

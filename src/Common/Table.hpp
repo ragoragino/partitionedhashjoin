@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <iostream>
 #include <new>
-#include <vector>
 #include <string>
+#include <vector>
 
 #ifndef CACHE_LINE_SIZE
 #define CACHE_LINE_SIZE std::hardware_destructive_interference_size
@@ -28,10 +28,10 @@ struct JoinedTuple {
     friend std::ostream &operator<<(std::ostream &out, const JoinedTuple &tuple);
 };
 
-template<typename TupleType>
+template <typename TupleType>
 class Table {
    public:
-    Table(std::string id) : m_id(id) {};
+    Table(std::string id) : m_id(id){};
 
     Table(size_t size, std::string id) : m_tuples(size), m_id(id) {}
 

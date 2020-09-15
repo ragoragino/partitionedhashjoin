@@ -95,8 +95,8 @@ class LinearProbingHashTable {
     using Bucket = internal::LinearProbing::Bucket<BucketValueType, BucketSize>;
 
    public:
-    LinearProbingHashTable(const LinearProbingConfiguration& configuration, const HasherType& hasher,
-                           size_t numberOfObjects)
+    LinearProbingHashTable(const LinearProbingConfiguration& configuration,
+                           const HasherType& hasher, size_t numberOfObjects)
         : m_hasher(hasher),
           m_configuration(configuration),
           m_numberOfBuckets(
@@ -107,7 +107,9 @@ class LinearProbingHashTable {
                       [](std::atomic_flag& latch) { latch.clear(); });
 
         if (numberOfObjects <= 0) {
-            throw std::invalid_argument("LinearProbingHashTable::LinearProbingHashTable: numberOfObjects must be greater than zero.");
+            throw std::invalid_argument(
+                "LinearProbingHashTable::LinearProbingHashTable: numberOfObjects must be greater "
+                "than zero.");
         }
     }
 
@@ -219,10 +221,8 @@ class LinearProbingFactory {
     LinearProbingFactory(const LinearProbingConfiguration& configuration, HasherType hasher)
         : m_configuration(configuration), m_hasher(hasher) {}
 
-    std::shared_ptr<HashTableType> New(
-        size_t numberOfObjects) const {
-        return std::make_shared<HashTableType>(
-            m_configuration, m_hasher, numberOfObjects);
+    std::shared_ptr<HashTableType> New(size_t numberOfObjects) const {
+        return std::make_shared<HashTableType>(m_configuration, m_hasher, numberOfObjects);
     }
 
    private:

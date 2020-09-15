@@ -17,7 +17,6 @@ class Sequential {
 
     static std::future<Common::TasksErrorHolder> FillTable(
         std::shared_ptr<Common::IThreadPool> threadPool,
-                                      std::shared_ptr<Common::Table<Common::Tuple>> table,
-                                      const Parameters& parameters);
+        std::shared_ptr<Common::Table<Common::Tuple>> table, const Parameters& parameters);
 };
 };  // namespace DataGenerator

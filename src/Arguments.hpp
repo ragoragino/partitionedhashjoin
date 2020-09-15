@@ -1,7 +1,8 @@
 #pragma once
 
-#include "Common/Configuration.hpp"
 #include <boost/program_options.hpp>
+
+#include "Common/Configuration.hpp"
 
 inline void validateParsedConfiguration(const Common::Configuration& configuration,
                                         const boost::program_options::variables_map& vm) {

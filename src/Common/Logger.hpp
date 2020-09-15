@@ -7,7 +7,7 @@
 
 namespace Common {
 enum SeverityLevel { trace, debug, info, error, critical };
- 
+
 std::istream& operator>>(std::istream& in, SeverityLevel& obj);
 
 SeverityLevel SeverityLevelFromString(const std::string& level);
@@ -17,9 +17,7 @@ typedef boost::log::sources::severity_logger<SeverityLevel> LoggerType;
 struct LoggerConfiguration {
     LoggerConfiguration() : SeverityLevel(info){};
 
-    LoggerConfiguration(std::string level) { 
-        SeverityLevel = SeverityLevelFromString(level);
-    };
+    LoggerConfiguration(std::string level) { SeverityLevel = SeverityLevelFromString(level); };
 
     SeverityLevel SeverityLevel;
 };

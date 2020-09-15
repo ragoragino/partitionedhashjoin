@@ -2,6 +2,7 @@
 
 #include <boost/core/null_deleter.hpp>
 #include <boost/log/attributes/clock.hpp>
+#include <boost/log/attributes/constant.hpp>
 #include <boost/log/core.hpp>
 #include <boost/log/expressions.hpp>
 #include <boost/log/expressions/formatters/stream.hpp>
@@ -11,7 +12,6 @@
 #include <boost/log/sources/severity_logger.hpp>
 #include <boost/log/support/date_time.hpp>
 #include <boost/smart_ptr/shared_ptr.hpp>
-#include <boost/log/attributes/constant.hpp>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -86,24 +86,24 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
                                             default_log_owner->configuration.SeverityLevel);
         default_log_owner->sink->set_formatter(
             boost::log::expressions::stream
-            << component
-            << "(" << severity << ") "
+            << component << "(" << severity << ") "
             << "(" << boost::log::expressions::format_date_time(timestamp, "%H:%M:%S.%f") << ") "
-            << tableID
-            << ": " << boost::log::expressions::smessage);
+            << tableID << ": " << boost::log::expressions::smessage);
 
         boost::log::core::get()->add_sink(default_log_owner->sink);
         boost::log::core::get()->add_global_attribute("Timestamp",
                                                       boost::log::attributes::local_clock{});
     } else {
         throw std::runtime_error(
-            "InitializeLogger: Cannot continue with initializing logger, because it is already initialized.");
+            "InitializeLogger: Cannot continue with initializing logger, because it is already "
+            "initialized.");
     }
 }
 
 LoggerType GetNewLogger() {
     if (!default_log_owner) {
-        throw std::runtime_error("GetNewLogger: Cannot create new logger. Logger was not initialized.");
+        throw std::runtime_error(
+            "GetNewLogger: Cannot create new logger. Logger was not initialized.");
     }
 
     return LoggerType{};

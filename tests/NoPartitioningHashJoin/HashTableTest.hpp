@@ -98,12 +98,12 @@ TEST(SeparateChainingTest, InsertGetAndExists) {
 TEST(LinearProbingTest, InsertGetAndExists) {
     size_t nOfObjects = 10;
     HashTables::LinearProbingConfiguration configuration{
-        1.0 / 0.75, // HASH_TABLE_SIZE_RATIO
+        1.0 / 0.75,  // HASH_TABLE_SIZE_RATIO
     };
 
     Common::XXHasher hasher{};
-    HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher> factory(
-        configuration, hasher);
+    HashTables::LinearProbingFactory<Common::Tuple, 3, Common::XXHasher> factory(configuration,
+                                                                                 hasher);
     auto hashTable = factory.New(nOfObjects);
 
     testInsertGetAndExists(hashTable);
@@ -126,7 +126,7 @@ TEST(SeparateChainingTest, Iterator) {
 TEST(LinearProbingTest, Iterator) {
     size_t nOfObjects = 10;
     HashTables::LinearProbingConfiguration configuration{
-        1.0 / 0.75, // HASH_TABLE_SIZE_RATIO
+        1.0 / 0.75,  // HASH_TABLE_SIZE_RATIO
     };
 
     Common::XXHasher hasher{};
@@ -145,7 +145,7 @@ TEST(SeparateChainingTest, TestMultiThreadedInsert) {
     Common::XXHasher hasher{};
     auto hashTable =
         std::make_shared<HashTables::SeparateChainingHashTable<Common::Tuple, 3, Common::XXHasher>>(
-        configuration, hasher, nOfObjects);
+            configuration, hasher, nOfObjects);
     testMultiThreaded(hashTable, nOfObjects);
 }
 

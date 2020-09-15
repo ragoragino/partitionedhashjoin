@@ -1,11 +1,10 @@
 #pragma once
 
-#include "IHasher.hpp"
-
-#include "xxh3.h"
-
 #include <limits>
 #include <random>
+
+#include "IHasher.hpp"
+#include "xxh3.h"
 
 namespace Common {
 class XXHasher : public IHasher {
@@ -24,7 +23,7 @@ class XXHasher : public IHasher {
 
     virtual ~XXHasher() = default;
 
-    private:
-        uint64_t m_seed;
+   private:
+    uint64_t m_seed;
 };
 }  // namespace Common
