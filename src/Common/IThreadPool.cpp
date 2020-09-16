@@ -1,5 +1,3 @@
-#pragma once
-
 #include "IThreadPool.hpp"
 
 namespace Common {

@@ -6,6 +6,7 @@
 #include <map>
 #include <thread>
 #include <vector>
+#include <algorithm>
 
 #include "Common/IHasher.hpp"
 #include "Common/Table.hpp"
@@ -238,7 +239,7 @@ class SeparateChainingHashTable {
         uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
         if (m_bucketPtrs[hash] == nullptr) {
-            return false;
+            return nullptr;
         }
 
         const Bucket* bucketPtr = m_bucketPtrs[hash];
@@ -251,7 +252,7 @@ class SeparateChainingHashTable {
             bucketPtr = bucketPtr->Next();
         }
 
-        return false;
+        return nullptr;
     }
 
     // not thread-safe - we shouldn't need to run GetAll during building of hash index

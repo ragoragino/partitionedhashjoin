@@ -6,8 +6,12 @@
 #include <string>
 #include <vector>
 
-#ifndef CACHE_LINE_SIZE
-#define CACHE_LINE_SIZE std::hardware_destructive_interference_size
+// We set a default value for the cache line size, if the compiler does not
+// support the feature
+#if __cpp_lib_hardware_interference_size >= 201603
+    #define PHJ_CACHE_LINE_SIZE std::hardware_destructive_interference_size
+#else 
+    #define PHJ_CACHE_LINE_SIZE 64
 #endif
 
 namespace Common {
@@ -33,7 +37,7 @@ class Table {
    public:
     Table(std::string id) : m_id(id){};
 
-    Table(size_t size, std::string id) : m_tuples(size), m_id(id) {}
+    Table(size_t size, std::string id) : m_id(id), m_tuples(size) {}
 
     TupleType &operator[](size_t index) { return m_tuples[index]; }
 
@@ -49,6 +53,6 @@ class Table {
     const std::string m_id;
     // To minimize the posobility of false sharing in cache, we align the vector on
     // cache line size
-    alignas(CACHE_LINE_SIZE) std::vector<TupleType> m_tuples;
+    alignas(PHJ_CACHE_LINE_SIZE) std::vector<TupleType> m_tuples;
 };
 }  // namespace Common

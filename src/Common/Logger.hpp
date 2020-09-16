@@ -15,11 +15,11 @@ SeverityLevel SeverityLevelFromString(const std::string& level);
 typedef boost::log::sources::severity_logger<SeverityLevel> LoggerType;
 
 struct LoggerConfiguration {
-    LoggerConfiguration() : SeverityLevel(info){};
+    LoggerConfiguration() : LogLevel(info){};
 
-    LoggerConfiguration(std::string level) { SeverityLevel = SeverityLevelFromString(level); };
+    LoggerConfiguration(std::string level) { LogLevel = SeverityLevelFromString(level); };
 
-    SeverityLevel SeverityLevel;
+    SeverityLevel LogLevel;
 };
 
 void InitializeLogger(const LoggerConfiguration& configuration);

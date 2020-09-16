@@ -16,7 +16,16 @@ target_include_directories(phjoinlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(phjoinlib PUBLIC ${Boost_INCLUDE_DIR})
 target_link_libraries(phjoinlib PUBLIC ${Boost_LIBRARIES})
 target_link_libraries(phjoinlib PUBLIC xxHash::xxhash)
-target_link_libraries(phjoinlib PUBLIC mimalloc)
+if(PHJ_USE_MIMALLOC)
+	target_compile_definitions(phjoinlib PRIVATE PHJ_USE_MIMALLOC)
+	target_link_libraries(phjoinlib PUBLIC mimalloc)
+endif()
+
+if(MSVC)
+    target_compile_options(phjoinlib PRIVATE /W4 $<$<CONFIG:RELEASE>:/O2>)
+else()
+    target_compile_options(phjoinlib PRIVATE -Wall -Wextra -pedantic -Werror $<$<CONFIG:RELEASE>:-O3>)
+endif()
 
 add_executable(phjoin "main.cpp")
 target_link_libraries(phjoin PRIVATE phjoinlib)
@@ -31,6 +40,12 @@ if(PHJ_USE_MIMALLOC)
 					${PHJ_MIMALLOC_DLL_DIR}
 					$<TARGET_FILE_DIR:phjoin>)
 	endif()
+endif()
+
+if(MSVC)
+    target_compile_options(phjoin PRIVATE /W4 $<$<CONFIG:RELEASE>:/O2>)
+else()
+    target_compile_options(phjoin PRIVATE -Wall -Wextra -pedantic -Werror $<$<CONFIG:RELEASE>:-O3>)
 endif()
 
 # Allow profiling when on MSVC

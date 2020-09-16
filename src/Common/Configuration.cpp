@@ -92,7 +92,7 @@ void OutputConfiguration::Validate() const {
     }
 }
 
-void TestResultsFormatConfiguration::Validate() const {
+void ResultsFormatConfiguration::Validate() const {
     static const std::vector<std::string> allowedTimeUnits = {"ns", "us", "ms", "s"};
 
     for (const std::string& allowedTimeUnit : allowedTimeUnits) {
@@ -102,6 +102,6 @@ void TestResultsFormatConfiguration::Validate() const {
     }
 
     throw std::invalid_argument(
-        "TestResultsFormatConfiguration::Validate: Unrecognized time unit: " + TimeUnit);
+        "ResultsFormatConfiguration::Validate: Unrecognized time unit: " + TimeUnit);
 }
 }  // namespace Common

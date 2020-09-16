@@ -4,7 +4,7 @@
 
 namespace Common {
 MultiplicativeLCGRandomNumberGenerator::MultiplicativeLCGRandomNumberGenerator(long seed)
-    : m_state(seed){};
+    : m_state(seed){}
 
 double MultiplicativeLCGRandomNumberGenerator::Next() {
     const long a = 16807;       // Multiplier

@@ -15,7 +15,7 @@ size_t getNumberOfBuckets(const LinearProbingConfiguration& configuration, size_
     }
 
     return numberOfBuckets;
-};
+}
 
 }  // namespace LinearProbing
 }  // namespace internal

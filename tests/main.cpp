@@ -1,4 +1,6 @@
+#ifdef PHJ_USE_MIMALLOC
 #include <mimalloc.h>
+#endif
 
 #include "DataGenerator/ZipfTest.hpp"
 #include "NoPartitioningHashJoin/HashTableTest.hpp"

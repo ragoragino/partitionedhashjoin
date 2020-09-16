@@ -6,8 +6,8 @@
 #include "Common/IHasher.hpp"
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
+#include "Common/Results.hpp"
 #include "Common/Table.hpp"
-#include "Common/TestResults.hpp"
 #include "Configuration.hpp"
 #include "HashTables/SeparateChaining.hpp"
 
@@ -24,7 +24,7 @@ class PartitionsInfo {
         }
     }
 
-    std::pair<size_t, size_t> PartitionsInfo::GetPartitionBoundaries(size_t partition) const {
+    std::pair<size_t, size_t> GetPartitionBoundaries(size_t partition) const {
         return m_partitionBorders[partition];
     };
 
@@ -40,18 +40,18 @@ struct PartitioningConfiguration {
 
 class PrefixSumTable {
    public:
-    PrefixSumTable::PrefixSumTable(size_t numberOfPartitions, size_t numberOfWorkers)
+    PrefixSumTable(size_t numberOfPartitions, size_t numberOfWorkers)
         : m_table(numberOfPartitions * numberOfWorkers), m_numberOfPartitions(numberOfPartitions) {}
 
-    size_t PrefixSumTable::Get(size_t hashIndex, size_t workerIndex) const {
+    size_t Get(size_t hashIndex, size_t workerIndex) const {
         return m_table[workerIndex * m_numberOfPartitions + hashIndex];
     }
 
-    void PrefixSumTable::Set(size_t hashIndex, size_t workerIndex, size_t value) {
+    void Set(size_t hashIndex, size_t workerIndex, size_t value) {
         m_table[workerIndex * m_numberOfPartitions + hashIndex] = value;
     }
 
-    void PrefixSumTable::Increment(size_t hashIndex, size_t workerIndex) {
+    void Increment(size_t hashIndex, size_t workerIndex) {
         m_table[workerIndex * m_numberOfPartitions + hashIndex]++;
     }
 
@@ -127,8 +127,8 @@ class HashJoiner {
     GetPartitioningConfiguration(std::shared_ptr<Common::Table<Common::Tuple>> tableA,
                                  std::shared_ptr<Common::Table<Common::Tuple>> tableB);
 
-    std::shared_ptr<Common::IThreadPool> m_threadPool;
     Configuration m_configuration;
+    std::shared_ptr<Common::IThreadPool> m_threadPool;
     Common::LoggerType m_logger;
     HasherType m_hasher;
     HashTableFactory m_hashTableFactory;
@@ -360,7 +360,7 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
         LOG(this->m_logger, Common::SeverityLevel::debug)
             << "Partition " << partitionID << " started creating prefix sum table.";
 
-        size_t runningBucketSize, currentBucketSize;
+        size_t runningBucketSize = 0, currentBucketSize;
         for (size_t i = 0; i != partitionConfiguration.NumberOfWorkers; i++) {
             if (i == 0) {
                 runningBucketSize = prefixSumTable->Get(partitionID, i);
@@ -396,8 +396,8 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
             uint64_t partition =
                 m_hasher.Hash((*table)[i].id, partitionConfiguration.NumberOfPartitions);
             size_t position = prefixSumTable->Get(partition, workerID);
-            auto [partitionStart, partitionEnd] = partitionInfo.GetPartitionBoundaries(partition);
-            (*partitionedTable)[partitionStart + position] = (*table)[i];
+            auto partitionBounaries = partitionInfo.GetPartitionBoundaries(partition);
+            (*partitionedTable)[partitionBounaries.first + position] = (*table)[i];
             prefixSumTable->Increment(partition, workerID);
         }
 

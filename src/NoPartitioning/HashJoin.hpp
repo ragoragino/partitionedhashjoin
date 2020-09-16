@@ -7,7 +7,7 @@
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
 #include "Common/Table.hpp"
-#include "Common/TestResults.hpp"
+#include "Common/Results.hpp"
 #include "Configuration.hpp"
 
 namespace NoPartitioning {
@@ -34,8 +34,8 @@ class HashJoiner {
         std::shared_ptr<HashTableType> hashTable,
         std::shared_ptr<Common::Table<Common::Tuple>> tableB, size_t numberOfWorkers);
 
-    std::shared_ptr<Common::IThreadPool> m_threadPool;
     Configuration m_configuration;
+    std::shared_ptr<Common::IThreadPool> m_threadPool;
     Common::LoggerType m_logger;
     HashTableFactory m_hashTableFactory;
 };
@@ -141,7 +141,7 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
     }
 
     std::atomic<size_t> globalCounter(0);
-    auto probeHashTable = [&globalCounter, &tableB, hashTable](size_t index, size_t tableStart,
+    auto probeHashTable = [&globalCounter, &tableB, hashTable](size_t tableStart,
                                                                size_t tableEnd) {
         size_t counter = 0;
 
@@ -165,7 +165,7 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
             end = tableBSize;
         }
 
-        tasks.push_back(std::bind(probeHashTable, i, start, end));
+        tasks.push_back(std::bind(probeHashTable, start, end));
     }
 
     LOG(m_logger, Common::debug) << "Starting probe phase.";

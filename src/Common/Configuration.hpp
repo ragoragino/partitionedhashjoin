@@ -45,7 +45,8 @@ struct OutputConfiguration {
     void Validate() const;
 };
 
-struct TestResultsFormatConfiguration {
+struct ResultsFormatConfiguration {
+    ResultsFormat Format;
     std::string TimeUnit;
 
     void Validate() const;
@@ -53,17 +54,16 @@ struct TestResultsFormatConfiguration {
 
 struct Configuration {
     JoinAlgorithmType JoinType;
-    ResultsFormat ResultsFormat;
-    TestResultsFormatConfiguration ResultsFormatConfiguration;
-    OutputConfiguration Output;
+    ResultsFormatConfiguration OutputFormatConfig;
+    OutputConfiguration OutputConfig;
 
     size_t PrimaryRelationSize;
     size_t SecondaryRelationSize;
     double SkewParameter;
 
-    NoPartitioning::Configuration NoPartitioningConfiguration;
-    RadixClustering::Configuration RadixClusteringConfiguration;
+    NoPartitioning::Configuration NoPartitioningConfig;
+    RadixClustering::Configuration RadixClusteringConfig;
 
-    LoggerConfiguration LoggerConfiguration;
+    LoggerConfiguration LoggerConfig;
 };
 }  // namespace Common

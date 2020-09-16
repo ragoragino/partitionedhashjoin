@@ -25,14 +25,14 @@ class Parameters {
 
     class Iterator {
        public:
-        Iterator::Iterator(StorageType::const_iterator iter) : m_iter{iter} {}
+        Iterator(StorageType::const_iterator iter) : m_iter{iter} {}
 
-        typename Iterator& operator++() {
+        Iterator& operator++() {
             this->m_iter++;
             return *this;
         }
 
-        typename Iterator& Iterator::operator++(int) {
+        Iterator operator++(int) {
             Iterator it = *this;
             ++*this;
             return it;
@@ -63,10 +63,10 @@ class HashJoinTimingResult {
 
     HashJoinTimingResult(std::chrono::nanoseconds buildPhase, std::chrono::nanoseconds probePhase,
                          std::chrono::nanoseconds partitioningPhase, const Parameters& parameters)
-        : m_buildPhase(buildPhase),
+        : m_parameters(parameters),
+          m_buildPhase(buildPhase),
           m_probePhase(probePhase),
-          m_partitioningPhase(partitioningPhase),
-          m_parameters(parameters) {}
+          m_partitioningPhase(partitioningPhase) {}
 
     void SetBuildPhaseDuration(std::chrono::nanoseconds buildPhase) { m_buildPhase = buildPhase; };
     void SetProbePhaseDuration(std::chrono::nanoseconds probePhase) { m_probePhase = probePhase; };
@@ -157,9 +157,9 @@ class NoOpHashJoinTimer final : public IHashJoinTimer {
     void SetProbePhaseBegin(){};
     void SetProbePhaseEnd(){};
 
-    void SetBuildPhaseDuration(std::chrono::nanoseconds duration){};
-    void SetProbePhaseDuration(std::chrono::nanoseconds duration){};
-    void SetPartitionPhaseDuration(std::chrono::nanoseconds duration){};
+    void SetBuildPhaseDuration(std::chrono::nanoseconds){};
+    void SetProbePhaseDuration(std::chrono::nanoseconds){};
+    void SetPartitionPhaseDuration(std::chrono::nanoseconds){};
 
     HashJoinTimingResult GetResult() { return HashJoinTimingResult(); };
 };
@@ -239,30 +239,29 @@ class HashJoinTimer final : public IHashJoinTimer {
     };
 
    private:
+    Parameters m_parameters;
     bool m_buildTimeSet, m_probeTimeSet, m_partitioningTimeSet;
     std::chrono::nanoseconds m_buildTime, m_probeTime, m_partitioningTime;
     std::chrono::time_point<std::chrono::steady_clock> m_buildStart, m_probeStart,
         m_partitioningStart;
-
-    Parameters m_parameters;
 };
 
-class ITestResultsFormatter {
+class IResultsFormatter {
    public:
     virtual void Format(std::basic_ostream<char>& stream, const HashJoinTimingResult& result) = 0;
-    virtual ~ITestResultsFormatter() = default;
+    virtual ~IResultsFormatter() = default;
 };
 
-class ITestResultsRenderer {
+class IResultsRenderer {
    public:
-    virtual void Render(std::shared_ptr<ITestResultsFormatter> formatter,
+    virtual void Render(std::shared_ptr<IResultsFormatter> formatter,
                         const HashJoinTimingResult& result) = 0;
-    virtual ~ITestResultsRenderer() = default;
+    virtual ~IResultsRenderer() = default;
 };
 
-class JSONResultsFormatter final : public ITestResultsFormatter {
+class JSONResultsFormatter final : public IResultsFormatter {
    public:
-    JSONResultsFormatter(const TestResultsFormatConfiguration& config) : m_config(config){};
+    JSONResultsFormatter(const ResultsFormatConfiguration& config) : m_config(config){};
 
     void Format(std::basic_ostream<char>& stream, const HashJoinTimingResult& results) {
         boost::property_tree::ptree pt = this->GetBaseFormat();
@@ -300,53 +299,51 @@ class JSONResultsFormatter final : public ITestResultsFormatter {
         } else if (m_config.TimeUnit == "s") {
             s << std::chrono::duration_cast<std::chrono::seconds>(duration).count();
         } else {
-            throw std::runtime_error("JSONResultsFormatter::CastDurationToString: unrecognized duration unit: " +
-                                     m_config.TimeUnit);
+            throw std::runtime_error(
+                "JSONResultsFormatter::CastDurationToString: unrecognized duration unit: " +
+                m_config.TimeUnit);
         }
 
         return s.str();
     }
 
-    const TestResultsFormatConfiguration m_config;
+    const ResultsFormatConfiguration m_config;
 };
 
-class FileTestResultsRenderer final : public ITestResultsRenderer {
+class FileResultsRenderer final : public IResultsRenderer {
    public:
-    FileTestResultsRenderer(const OutputConfiguration& config) : m_file(config.File.Name) {}
+    FileResultsRenderer(const OutputConfiguration& config) : m_file(config.File.Name) {}
 
-    void Render(std::shared_ptr<ITestResultsFormatter> formatter,
-                const HashJoinTimingResult& result) {
+    void Render(std::shared_ptr<IResultsFormatter> formatter, const HashJoinTimingResult& result) {
         return formatter->Format(m_file, result);
     }
 
-    ~FileTestResultsRenderer() { m_file.close(); }
+    ~FileResultsRenderer() { m_file.close(); }
 
    private:
     std::ofstream m_file;
 };
 
-inline std::shared_ptr<ITestResultsFormatter> SelectResultsFormatter(const Configuration& config) {
-    switch (config.ResultsFormat) {
+inline std::shared_ptr<IResultsFormatter> SelectResultsFormatter(const Configuration& config) {
+    switch (config.OutputFormatConfig.Format) {
         case ResultsFormat::JSON:
-            return std::make_shared<JSONResultsFormatter>(config.ResultsFormatConfiguration);
+            return std::make_shared<JSONResultsFormatter>(config.OutputFormatConfig);
         default:
             std::stringstream is;
-            is << "Unrecognized results format: " << config.ResultsFormat << ".";
-            throw std::runtime_error(is.str());
-    };
-
-    return nullptr;
-};
-
-inline std::shared_ptr<ITestResultsRenderer> SelectResultsRenderer(const Configuration& config) {
-    switch (config.Output.Type) {
-        case OutputType::File:
-            return std::make_shared<FileTestResultsRenderer>(config.Output);
-        default:
-            std::stringstream is;
-            is << "Unrecognized output type: " << config.Output.Type << ".";
+            is << "Unrecognized results format: " << config.OutputFormatConfig.Format << ".";
             throw std::runtime_error(is.str());
     };
 }
 
-};  // namespace Common
+inline std::shared_ptr<IResultsRenderer> SelectResultsRenderer(const Configuration& config) {
+    switch (config.OutputConfig.Type) {
+        case OutputType::File:
+            return std::make_shared<FileResultsRenderer>(config.OutputConfig);
+        default:
+            std::stringstream is;
+            is << "Unrecognized output type: " << config.OutputConfig.Type << ".";
+            throw std::runtime_error(is.str());
+    };
+}
+
+}  // namespace Common

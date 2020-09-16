@@ -19,4 +19,4 @@ class Sequential {
         std::shared_ptr<Common::IThreadPool> threadPool,
         std::shared_ptr<Common::Table<Common::Tuple>> table, const Parameters& parameters);
 };
-};  // namespace DataGenerator
+}  // namespace DataGenerator

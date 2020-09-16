@@ -82,8 +82,7 @@ void InitializeLogger(const LoggerConfiguration& configuration) {
 
         default_log_owner->sink = boost::make_shared<sink_t>(backend);
 
-        default_log_owner->sink->set_filter(severity >=
-                                            default_log_owner->configuration.SeverityLevel);
+        default_log_owner->sink->set_filter(severity >= default_log_owner->configuration.LogLevel);
         default_log_owner->sink->set_formatter(
             boost::log::expressions::stream
             << component << "(" << severity << ") "
@@ -119,8 +118,9 @@ void AddComponentAttributeToLogger(LoggerType& logger, std::string componentName
                          boost::log::attributes::constant<std::string>(componentWrapped));
 }
 
-void AddTableIDToLogger(LoggerType& logger, std::string tableID) {
-    std::string tableIDWrapped = "(" + tableID + ") ";
-    logger.add_attribute("TableID", boost::log::attributes::constant<std::string>(tableIDWrapped));
+void AddTableIDToLogger(LoggerType& logger, std::string tableIdentifier) {
+    std::string tableIdentifierWrapped = "(" + tableIdentifier + ") ";
+    logger.add_attribute("TableID",
+                         boost::log::attributes::constant<std::string>(tableIdentifierWrapped));
 }
 }  // namespace Common

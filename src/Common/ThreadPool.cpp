@@ -7,7 +7,7 @@
 
 namespace Common {
 ThreadPool::ThreadPool(size_t numberOfWorkers)
-    : m_workers(numberOfWorkers), m_workPipe(std::make_shared<internal::ThreadPool::WorkPipe>()) {
+    : m_workPipe(std::make_shared<internal::ThreadPool::WorkPipe>()), m_workers(numberOfWorkers) {
     std::for_each(m_workers.begin(), m_workers.end(),
                   [this](internal::ThreadPool::Worker& worker) { worker.Start(this->m_workPipe); });
 }
@@ -34,10 +34,10 @@ void ThreadPool::Stop() {
 }
 
 Pipeline::Pipeline(std::shared_ptr<IThreadPool> thread_pool)
-    : m_idCounter(0),
-      m_finishedBatches(0),
+    : m_started(false),
       m_failed(false),
-      m_started(false),
+      m_idCounter(0),
+      m_finishedBatches(0),
       m_threadPool(thread_pool) {}
 
 size_t Pipeline::Add(std::vector<std::function<void()>>&& f) {
@@ -148,7 +148,7 @@ void Pipeline::finished(size_t id) {
 namespace internal {
 namespace ThreadPool {
 WorkManager::WorkManager(std::vector<std::function<void()>>&& funcs)
-    : m_counter(funcs.size()), m_work(std::move(funcs)){};
+    : m_counter(funcs.size()), m_work(std::move(funcs)){}
 
 std::vector<std::function<void()>> WorkManager::GetTasks() {
     if (m_work.size() == 0) {
@@ -251,7 +251,7 @@ std::future<TasksErrorHolder> WorkPipe::Push(std::shared_ptr<IPipeline> pipeline
     return future;
 }
 
-std::tuple<bool, std::function<void()>> WorkPipe::Wait(size_t id) {
+std::tuple<bool, std::function<void()>> WorkPipe::Wait(size_t) {
     std::unique_lock<std::mutex> lock(m_mutex);
 
     if (!m_global_workqueue.empty()) {

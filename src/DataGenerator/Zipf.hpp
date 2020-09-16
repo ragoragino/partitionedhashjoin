@@ -27,4 +27,4 @@ class Zipf {
     static uint64_t generate(double alpha, uint64_t cardinality,
                              std::shared_ptr<Common::IRandomNumberGenerator> generator);
 };
-};  // namespace DataGenerator
+}  // namespace DataGenerator

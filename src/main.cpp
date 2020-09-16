@@ -22,7 +22,7 @@
 #include "Common/Logger.hpp"
 #include "Common/Random.hpp"
 #include "Common/Table.hpp"
-#include "Common/TestResults.hpp"
+#include "Common/Results.hpp"
 #include "Common/ThreadPool.hpp"
 #include "Common/XXHasher.hpp"
 #include "DataGenerator/Sequential.hpp"
@@ -89,7 +89,7 @@ Common::HashJoinTimingResult joinNoPartitioning(
     LOG(logger, Common::SeverityLevel::debug) << "Executing NoPartitionHashJoin algorithm.";
 
     auto noPartitioningHashJoiner =
-        NoPartitioning::HashJoiner(config.NoPartitioningConfiguration, threadPool, factory);
+        NoPartitioning::HashJoiner(config.NoPartitioningConfig, threadPool, factory);
 
     Common::Parameters params;
     params.SetParameter("PrimaryRelationSize", std::to_string(config.PrimaryRelationSize));
@@ -118,7 +118,7 @@ Common::HashJoinTimingResult joinRadixPartitioning(
     LOG(logger, Common::SeverityLevel::debug) << "Executing Radix Clustering join algorithm.";
 
     auto radixClusteringHashJoiner = RadixClustering::HashJoiner(
-        config.RadixClusteringConfiguration, threadPool, partitionsHasher, factory);
+        config.RadixClusteringConfig, threadPool, partitionsHasher, factory);
 
     Common::Parameters params;
     params.SetParameter("PrimaryRelationSize", std::to_string(config.PrimaryRelationSize));
@@ -126,7 +126,7 @@ Common::HashJoinTimingResult joinRadixPartitioning(
     params.SetParameter("Skew", std::to_string(config.SkewParameter));
     params.SetParameter("Type", "RadixParitioning");
     params.SetParameter("NumberOfPartitions",
-                        std::to_string(config.RadixClusteringConfiguration.NumberOfPartitions));
+                        std::to_string(config.RadixClusteringConfig.NumberOfPartitions));
 
     std::shared_ptr<Common::IHashJoinTimer> timer = std::make_shared<Common::HashJoinTimer>(params);
     std::shared_ptr<Common::Table<Common::JoinedTuple>> outputTupleRadixClustering =
@@ -156,7 +156,7 @@ Common::Configuration parseArguments(int argc, char** argv) {
         "Parameter of skew for Zipf distribution used for the generation of tuples for secondary "
         "relation.")("log",
                      boost::program_options::value<Common::SeverityLevel>(
-                         &configuration.LoggerConfiguration.SeverityLevel)
+                         &configuration.LoggerConfig.LogLevel)
                          ->default_value(Common::debug, "trace"),
                      "Logging level. One of {trace, debug, info, error, critical}.")(
         "join",
@@ -164,24 +164,24 @@ Common::Configuration parseArguments(int argc, char** argv) {
             ->required(),
         "Type of join algorithm: either no-partitioning or radix-partitioning.")(
         "format",
-        boost::program_options::value<Common::ResultsFormat>(&configuration.ResultsFormat)
+        boost::program_options::value<Common::ResultsFormat>(&configuration.OutputFormatConfig.Format)
             ->default_value(Common::ResultsFormat::JSON),
         "Format of the output. Currently only JSON is supported.")(
         "unit,u",
-        boost::program_options::value<std::string>(&configuration.ResultsFormatConfiguration.TimeUnit)
+        boost::program_options::value<std::string>(&configuration.OutputFormatConfig.TimeUnit)
             ->default_value("ms"),
         "Duration unit of the timing output. One of {ns, us, ms, s}.")(
         "output,o",
-        boost::program_options::value<Common::OutputType>(&configuration.Output.Type)
+        boost::program_options::value<Common::OutputType>(&configuration.OutputConfig.Type)
             ->default_value(Common::OutputType::File),
         "Type of the output. Currently only file is supported.")(
         "filename,f",
-        boost::program_options::value<std::string>(&configuration.Output.File.Name)
+        boost::program_options::value<std::string>(&configuration.OutputConfig.File.Name)
             ->default_value("hashjoin.txt"),
         "Name of the file if output type is file.")(
         "partitions,p",
         boost::program_options::value<size_t>(
-            &configuration.RadixClusteringConfiguration.NumberOfPartitions),
+            &configuration.RadixClusteringConfig.NumberOfPartitions),
         "Number of partitions for algorithms using partitioning.");
 
     try {
@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
     Common::Configuration configuration = parseArguments(argc, argv);
 
     // Initialize logger
-    Common::InitializeLogger(configuration.LoggerConfiguration);
+    Common::InitializeLogger(configuration.LoggerConfig);
 
     auto logger = Common::GetNewLogger();
     Common::AddComponentAttributeToLogger(logger, "main");
@@ -240,11 +240,11 @@ int main(int argc, char** argv) {
         std::make_shared<Common::ThreadPool>(maxNumberOfThreads);
 
     // Initialize results formatter
-    std::shared_ptr<Common::ITestResultsFormatter> resultsFormatter =
+    std::shared_ptr<Common::IResultsFormatter> resultsFormatter =
         Common::SelectResultsFormatter(configuration);
 
     // Initialize results renderer
-    std::shared_ptr<Common::ITestResultsRenderer> resultsRenderer =
+    std::shared_ptr<Common::IResultsRenderer> resultsRenderer =
         Common::SelectResultsRenderer(configuration);
 
     LOG(logger, Common::SeverityLevel::info) << "Starting running tests.";

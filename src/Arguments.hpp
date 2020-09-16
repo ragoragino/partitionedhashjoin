@@ -6,8 +6,8 @@
 
 inline void validateParsedConfiguration(const Common::Configuration& configuration,
                                         const boost::program_options::variables_map& vm) {
-    configuration.Output.Validate();
-    configuration.ResultsFormatConfiguration.Validate();
+    configuration.OutputConfig.Validate();
+    configuration.OutputFormatConfig.Validate();
 
     if (configuration.JoinType != Common::JoinAlgorithmType::RadixParitioning) {
         if (vm.count("partitions")) {

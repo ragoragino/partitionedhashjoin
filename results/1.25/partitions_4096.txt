@@ -1,14 +1,15 @@
 {
     "id": "hashjointimingresult",
     "parameters": {
+        "NumberOfPartitions": "4096",
         "PrimaryRelationSize": "10000000",
         "SecondaryRelationSize": "200000000",
-        "Skew": "1.250000",
-        "Type": "NoPartitioning"
+        "Skew": "1.050000",
+        "Type": "RadixParitioning"
     },
     "results": {
-        "partition": "0",
-        "build": "294",
-        "probe": "624"
+        "partition": "1052",
+        "build": "12",
+        "probe": "366"
     }
 }

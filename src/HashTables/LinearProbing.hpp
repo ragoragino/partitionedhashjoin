@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -67,10 +68,6 @@ class alignas(64) Bucket {
         return nullptr;
     }
 
-    void SetNext(Bucket<Value, N>* nextBucket) { m_nextBucket = nextBucket; };
-
-    Bucket<Value, N>* Next() const { return m_nextBucket; }
-
     void GetAll(int64_t key, std::vector<const Value*>& result) const {
         for (size_t i = 0; i != m_freePosition; ++i) {
             if (m_keys[i] == key) {
@@ -97,12 +94,12 @@ class LinearProbingHashTable {
    public:
     LinearProbingHashTable(const LinearProbingConfiguration& configuration,
                            const HasherType& hasher, size_t numberOfObjects)
-        : m_hasher(hasher),
-          m_configuration(configuration),
+        : m_configuration(configuration),
           m_numberOfBuckets(
               internal::LinearProbing::getNumberOfBuckets(configuration, numberOfObjects)),
           m_buckets(m_numberOfBuckets, Bucket{}),
-          m_bucketLatches(m_numberOfBuckets) {
+          m_bucketLatches(m_numberOfBuckets),
+          m_hasher(hasher) {
         std::for_each(m_bucketLatches.begin(), m_bucketLatches.end(),
                       [](std::atomic_flag& latch) { latch.clear(); });
 
@@ -163,7 +160,6 @@ class LinearProbingHashTable {
     const BucketValueType* Get(int64_t key) {
         uint64_t hash = m_hasher.Hash(key, m_numberOfBuckets);
 
-        bool exists = false;
         const BucketValueType* bucketValue = nullptr;
         const Bucket* bucketPtr;
         while (true) {
@@ -208,8 +204,8 @@ class LinearProbingHashTable {
    private:
     const LinearProbingConfiguration m_configuration;
     const size_t m_numberOfBuckets;
-    std::vector<std::atomic_flag> m_bucketLatches;
     std::vector<Bucket> m_buckets;
+    std::vector<std::atomic_flag> m_bucketLatches;
     HasherType m_hasher;
 };
 
@@ -219,7 +215,7 @@ class LinearProbingFactory {
     typedef LinearProbingHashTable<BucketValueType, BucketSize, HasherType> HashTableType;
 
     LinearProbingFactory(const LinearProbingConfiguration& configuration, HasherType hasher)
-        : m_configuration(configuration), m_hasher(hasher) {}
+        : m_hasher(hasher), m_configuration(configuration) {}
 
     std::shared_ptr<HashTableType> New(size_t numberOfObjects) const {
         return std::make_shared<HashTableType>(m_configuration, m_hasher, numberOfObjects);

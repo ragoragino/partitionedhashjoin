@@ -61,17 +61,17 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 mkdir -p ${SKEW}
 cd ${SKEW}
 
-rm -f *
+rm *
 
 touch figure.dat
 printf "NumberOfPartitions\nPartition\nBuild\nProbe" > figure.dat
 
-${PHJOIN_BINARY_PATH} --skew ${SKEW} --join no-partitioning -o file --filename skew_${SKEW}.partitions_1.txt
-concat_columns figure.dat skew_${SKEW}.partitions_1.txt NoPartitioning
+${PHJOIN_BINARY_PATH} --skew ${SKEW} --join no-partitioning -o file --filename partitions_1.txt
+concat_columns figure.dat partitions_1.txt NoPartitioning
 
 for PARTITIONS in 32 64 128 256 512 1024 2048 4096 8192; do
-	${PHJOIN_BINARY_PATH} --skew 1.05 --join radix-partitioning -p ${PARTITIONS} -o file --filename skew_${SKEW}.partitions_${PARTITIONS}.txt
-	concat_columns figure.dat skew_${SKEW}.partitions_${PARTITIONS}.txt Radix${PARTITIONS}
+	${PHJOIN_BINARY_PATH} --skew 1.05 --join radix-partitioning -p ${PARTITIONS} -o file --filename partitions_${PARTITIONS}.txt
+	concat_columns figure.dat partitions_${PARTITIONS}.txt Radix${PARTITIONS}
 done
 
 gnuplot -e "env_data='figure.dat'" -e "env_figure_title='Comparison of the performance of selected hash join algorithmn for skew: ${SKEW}'"  ${SCRIPT_DIR}/figure.plot > ${NAME}
