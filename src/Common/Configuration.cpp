@@ -83,4 +83,25 @@ std::ostream& operator<<(std::ostream& os, OutputType outputType) {
     return os;
 }
 
+void OutputConfiguration::Validate() const {
+    if (Type == Common::OutputType::File) {
+        if (File.Name == "") {
+            throw std::invalid_argument(
+                "OutputConfiguration::Validate: empty configuration filename specified.");
+        }
+    }
+}
+
+void TestResultsFormatConfiguration::Validate() const {
+    static const std::vector<std::string> allowedTimeUnits = {"ns", "us", "ms", "s"};
+
+    for (const std::string& allowedTimeUnit : allowedTimeUnits) {
+        if (TimeUnit == allowedTimeUnit) {
+            return;
+        }
+    }
+
+    throw std::invalid_argument(
+        "TestResultsFormatConfiguration::Validate: Unrecognized time unit: " + TimeUnit);
+}
 }  // namespace Common

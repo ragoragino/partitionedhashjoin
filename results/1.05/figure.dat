@@ -1,0 +1,4 @@
+NumberOfPartitions NoPartitioning Radix32 Radix64 Radix128 Radix256 Radix512 Radix1024 Radix2048 Radix4096 Radix8192
+Partition 0 683 805 750 730 720 746 784 918 1217
+Build 297 150 70 55 42 33 33 11 12 12
+Probe 924 610 597 551 475 479 381 381 359 380

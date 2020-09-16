@@ -41,11 +41,20 @@ struct FileConfiguration {
 struct OutputConfiguration {
     OutputType Type;
     FileConfiguration File;
+
+    void Validate() const;
+};
+
+struct TestResultsFormatConfiguration {
+    std::string TimeUnit;
+
+    void Validate() const;
 };
 
 struct Configuration {
     JoinAlgorithmType JoinType;
-    ResultsFormat ResultFormat;
+    ResultsFormat ResultsFormat;
+    TestResultsFormatConfiguration ResultsFormatConfiguration;
     OutputConfiguration Output;
 
     size_t PrimaryRelationSize;

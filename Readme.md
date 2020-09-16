@@ -47,7 +47,10 @@ This project is licensed under the MIT License.
 
 ## Results
 
-TODO
+See directory results for details.
+
+![alt text](https://github.com/ragoragino/partitionedhashjoin/blob/master/results/1.05/figure.png?raw=true)
+![alt text](https://github.com/ragoragino/partitionedhashjoin/blob/master/results/1.25/figure.png?raw=true)
 
 ## Improvements
 - add support for Linux builds

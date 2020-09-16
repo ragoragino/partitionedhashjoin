@@ -1,0 +1,14 @@
+{
+    "id": "hashjointimingresult",
+    "parameters": {
+        "PrimaryRelationSize": "10000000",
+        "SecondaryRelationSize": "200000000",
+        "Skew": "1.050000",
+        "Type": "NoPartitioning"
+    },
+    "results": {
+        "partition": "0",
+        "build": "297",
+        "probe": "924"
+    }
+}

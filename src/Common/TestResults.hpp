@@ -247,13 +247,6 @@ class HashJoinTimer final : public IHashJoinTimer {
     Parameters m_parameters;
 };
 
-template <typename OutputDuration, typename InputDuration>
-std::string getStringDuration(InputDuration duration) {
-    std::ostringstream s;
-    s << std::chrono::duration_cast<OutputDuration>(duration).count();
-    return s.str();
-}
-
 class ITestResultsFormatter {
    public:
     virtual void Format(std::basic_ostream<char>& stream, const HashJoinTimingResult& result) = 0;
@@ -269,7 +262,7 @@ class ITestResultsRenderer {
 
 class JSONResultsFormatter final : public ITestResultsFormatter {
    public:
-    JSONResultsFormatter(){};
+    JSONResultsFormatter(const TestResultsFormatConfiguration& config) : m_config(config){};
 
     void Format(std::basic_ostream<char>& stream, const HashJoinTimingResult& results) {
         boost::property_tree::ptree pt = this->GetBaseFormat();
@@ -279,21 +272,9 @@ class JSONResultsFormatter final : public ITestResultsFormatter {
                           pt.add("parameters." + element.first, element.second);
                       });
 
-        pt.add("results.partition",
-               getStringDuration<std::chrono::milliseconds,
-                                 decltype(results.GetPartitioningPhaseDuration())>(
-                   results.GetPartitioningPhaseDuration()) +
-                   "ms");
-        pt.add(
-            "results.build",
-            getStringDuration<std::chrono::milliseconds, decltype(results.GetBuildPhaseDuration())>(
-                results.GetBuildPhaseDuration()) +
-                "ms");
-        pt.add(
-            "results.probe",
-            getStringDuration<std::chrono::milliseconds, decltype(results.GetBuildPhaseDuration())>(
-                results.GetProbePhaseDuration()) +
-                "ms");
+        pt.add("results.partition", CastDurationToString(results.GetPartitioningPhaseDuration()));
+        pt.add("results.build", CastDurationToString(results.GetBuildPhaseDuration()));
+        pt.add("results.probe", CastDurationToString(results.GetProbePhaseDuration()));
 
         boost::property_tree::json_parser::write_json(stream, pt);
     }
@@ -305,6 +286,28 @@ class JSONResultsFormatter final : public ITestResultsFormatter {
 
         return pt;
     }
+
+    template <typename InputDuration>
+    std::string CastDurationToString(InputDuration duration) {
+        std::ostringstream s;
+
+        if (m_config.TimeUnit == "ns") {
+            s << std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+        } else if (m_config.TimeUnit == "us") {
+            s << std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+        } else if (m_config.TimeUnit == "ms") {
+            s << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+        } else if (m_config.TimeUnit == "s") {
+            s << std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+        } else {
+            throw std::runtime_error("JSONResultsFormatter::CastDurationToString: unrecognized duration unit: " +
+                                     m_config.TimeUnit);
+        }
+
+        return s.str();
+    }
+
+    const TestResultsFormatConfiguration m_config;
 };
 
 class FileTestResultsRenderer final : public ITestResultsRenderer {
@@ -323,12 +326,12 @@ class FileTestResultsRenderer final : public ITestResultsRenderer {
 };
 
 inline std::shared_ptr<ITestResultsFormatter> SelectResultsFormatter(const Configuration& config) {
-    switch (config.ResultFormat) {
+    switch (config.ResultsFormat) {
         case ResultsFormat::JSON:
-            return std::make_shared<JSONResultsFormatter>();
+            return std::make_shared<JSONResultsFormatter>(config.ResultsFormatConfiguration);
         default:
             std::stringstream is;
-            is << "Unrecognized results format: " << config.ResultFormat << ".";
+            is << "Unrecognized results format: " << config.ResultsFormat << ".";
             throw std::runtime_error(is.str());
     };
 

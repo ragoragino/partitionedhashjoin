@@ -145,11 +145,11 @@ Common::Configuration parseArguments(int argc, char** argv) {
     desc.add_options()("help,h", "Help screen")(
         "primary",
         boost::program_options::value<size_t>(&configuration.PrimaryRelationSize)
-            ->default_value(1'000'000),
+            ->default_value(10'000'000),
         "Size of the primary relation.")(
         "secondary",
         boost::program_options::value<size_t>(&configuration.SecondaryRelationSize)
-            ->default_value(20'000'000),
+            ->default_value(200'000'000),
         "Size of the secondary relation.")(
         "skew",
         boost::program_options::value<double>(&configuration.SkewParameter)->default_value(1.05),
@@ -164,9 +164,13 @@ Common::Configuration parseArguments(int argc, char** argv) {
             ->required(),
         "Type of join algorithm: either no-partitioning or radix-partitioning.")(
         "format",
-        boost::program_options::value<Common::ResultsFormat>(&configuration.ResultFormat)
+        boost::program_options::value<Common::ResultsFormat>(&configuration.ResultsFormat)
             ->default_value(Common::ResultsFormat::JSON),
         "Format of the output. Currently only JSON is supported.")(
+        "unit,u",
+        boost::program_options::value<std::string>(&configuration.ResultsFormatConfiguration.TimeUnit)
+            ->default_value("ms"),
+        "Duration unit of the timing output. One of {ns, us, ms, s}.")(
         "output,o",
         boost::program_options::value<Common::OutputType>(&configuration.Output.Type)
             ->default_value(Common::OutputType::File),
@@ -180,22 +184,23 @@ Common::Configuration parseArguments(int argc, char** argv) {
             &configuration.RadixClusteringConfiguration.NumberOfPartitions),
         "Number of partitions for algorithms using partitioning.");
 
-    boost::program_options::variables_map vm;
-    boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
-
-    if (vm.count("help")) {
-        std::cout << desc << "\n";
-        exit(0);
-    }
-
-    boost::program_options::notify(vm);
-
     try {
+        boost::program_options::variables_map vm;
+        boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc),
+                                      vm);
+
+        if (vm.count("help")) {
+            std::cout << desc << "\n";
+            exit(0);
+        }
+
+        boost::program_options::notify(vm);
+
         validateParsedConfiguration(configuration, vm);
-    } catch (std::invalid_argument& e) {
+    } catch (std::exception& e) {
         std::cout << e.what() << "\n\n";
         std::cout << desc << "\n";
-        exit(0);
+        exit(1);
     }
 
     return configuration;
