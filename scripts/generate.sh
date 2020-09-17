@@ -66,7 +66,7 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 mkdir -p ${SKEW}
 cd ${SKEW}
 
-rm *
+rm -f *
 
 touch figure.dat
 printf "NumberOfPartitions\nPartition\nBuild\nProbe" > figure.dat

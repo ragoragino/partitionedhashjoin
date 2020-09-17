@@ -82,7 +82,7 @@ std::future<Common::TasksErrorHolder> Zipf::FillTable(
     int64_t correction =
         parameters.range.first - 1;  // [1, cardinality] is the sampling range of zip function
 
-    auto fillBatch = [&table, &parameters, cardinality, correction](size_t start, size_t end) {
+    auto fillBatch = [table, parameters, cardinality, correction](size_t start, size_t end) {
         auto generator = parameters.generatorFactory->GetNewGenerator();
 
         // TODO: Probably could call zipf for a batch of values
