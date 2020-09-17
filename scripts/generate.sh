@@ -9,9 +9,10 @@ Help()
    echo
    echo "Syntax: generate.sh [-p]"
    echo "options:"
-   echo "-p, --path: Path to the partitioning hash join program binary."
-   echo "-s, --skew: Skew parameter."
-   echo "-n, --name: Name of the PNG."
+   echo "-p, --path:            Path to the partitioning hash join program binary."
+   echo "-s, --skew:            Skew parameter."
+   echo "--primary:             Size of the primary relation."
+   echo "--secondary:           Size of the secondary relation."
    echo
 }
 
@@ -32,28 +33,32 @@ case "$1" in
     PHJOIN_BINARY_PATH=$(readlink -f "$2")
     shift 2
     ;;
-	-s|--skew)
-	SKEW=$2
+    -s|--skew)
+    SKEW=$2
     shift 2
     ;;
-	-n|--name)
-	NAME=$2
+    --primary)
+    ADDITIONAL_ARGS="${ADDITIONAL_ARGS} --primary $2"
     shift 2
     ;;
-	-h|--help)
+    --secondary)
+    ADDITIONAL_ARGS="${ADDITIONAL_ARGS} --secondary $2"
+    shift 2
+    ;;
+    -h|--help|*)
     Help
     exit 0
     ;;
 esac
 done
 
-REQUIRED_PARAMS=(${PHJOIN_BINARY_PATH} ${SKEW} ${NAME})
+REQUIRED_PARAMS=(${PHJOIN_BINARY_PATH} ${SKEW})
 
 for REQUIRED_PARAM in "${REQUIRED_PARAMS[@]}"; do
     if [[ -z ${REQUIRED_PARAM} ]]; then
 		Help
 		exit 1
-	fi
+    fi
 done
 
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
@@ -66,12 +71,12 @@ rm *
 touch figure.dat
 printf "NumberOfPartitions\nPartition\nBuild\nProbe" > figure.dat
 
-${PHJOIN_BINARY_PATH} --skew ${SKEW} --join no-partitioning -o file --filename partitions_1.txt
+${PHJOIN_BINARY_PATH} --skew ${SKEW} --join no-partitioning -o file --filename partitions_1.txt ${ADDITIONAL_ARGS}
 concat_columns figure.dat partitions_1.txt NoPartitioning
 
 for PARTITIONS in 32 64 128 256 512 1024 2048 4096 8192; do
-	${PHJOIN_BINARY_PATH} --skew 1.05 --join radix-partitioning -p ${PARTITIONS} -o file --filename partitions_${PARTITIONS}.txt
+	${PHJOIN_BINARY_PATH} --skew 1.05 --join radix-partitioning -p ${PARTITIONS} -o file --filename partitions_${PARTITIONS}.txt ${ADDITIONAL_ARGS}
 	concat_columns figure.dat partitions_${PARTITIONS}.txt Radix${PARTITIONS}
 done
 
-gnuplot -e "env_data='figure.dat'" -e "env_figure_title='Comparison of the performance of selected hash join algorithmn for skew: ${SKEW}'"  ${SCRIPT_DIR}/figure.plot > ${NAME}
+gnuplot -e "env_data='figure.dat'" -e "env_figure_title='Comparison of the performance of selected hash join algorithmn for skew: ${SKEW}'"  ${SCRIPT_DIR}/figure.plot > figure.png
