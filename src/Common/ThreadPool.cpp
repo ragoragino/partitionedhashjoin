@@ -148,7 +148,7 @@ void Pipeline::finished(size_t id) {
 namespace internal {
 namespace ThreadPool {
 WorkManager::WorkManager(std::vector<std::function<void()>>&& funcs)
-    : m_counter(funcs.size()), m_work(std::move(funcs)){}
+    : m_counter(funcs.size()), m_work(std::move(funcs)) {}
 
 std::vector<std::function<void()>> WorkManager::GetTasks() {
     if (m_work.size() == 0) {

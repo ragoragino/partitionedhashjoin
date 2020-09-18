@@ -116,8 +116,8 @@ HashJoiner<HashTableFactory>::Build(std::shared_ptr<Common::Table<Common::Tuple>
 
     createHashTableFuture.wait();
 
-    if (!createHashTableFuture.get().Empty()) {
-        throw createHashTableFuture.get().Pop();
+    if (auto tasksErrors = createHashTableFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
     }
 
     LOG(m_logger, Common::debug) << "Finished build phase.";
@@ -175,8 +175,8 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory>
 
     probeHashTableFuture.wait();
 
-    if (!probeHashTableFuture.get().Empty()) {
-        throw probeHashTableFuture.get().Pop();
+    if (auto tasksErrors = probeHashTableFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
     }
 
     LOG(m_logger, Common::debug) << "Finished probe phase.";

@@ -103,7 +103,7 @@ class LinearProbingHashTable {
         std::for_each(m_bucketLatches.begin(), m_bucketLatches.end(),
                       [](std::atomic_flag& latch) { latch.clear(); });
 
-        if (numberOfObjects <= 0) {
+        if (numberOfObjects == 0) {
             throw std::invalid_argument(
                 "LinearProbingHashTable::LinearProbingHashTable: numberOfObjects must be greater "
                 "than zero.");

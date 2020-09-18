@@ -21,8 +21,8 @@
 #include "Common/IThreadPool.hpp"
 #include "Common/Logger.hpp"
 #include "Common/Random.hpp"
-#include "Common/Table.hpp"
 #include "Common/Results.hpp"
+#include "Common/Table.hpp"
 #include "Common/ThreadPool.hpp"
 #include "Common/XXHasher.hpp"
 #include "DataGenerator/Sequential.hpp"
@@ -65,12 +65,12 @@ generateTables(Common::LoggerType& logger, const Common::Configuration& config,
     generatePrimaryKeyRelationFuture.wait();
     generateSecondaryKeyRelationFuture.wait();
 
-    if (!generatePrimaryKeyRelationFuture.get().Empty()) {
-        throw generatePrimaryKeyRelationFuture.get().Pop();
+    if (auto tasksErrors = generatePrimaryKeyRelationFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
     }
 
-    if (!generateSecondaryKeyRelationFuture.get().Empty()) {
-        throw generateSecondaryKeyRelationFuture.get().Pop();
+    if (auto tasksErrors = generateSecondaryKeyRelationFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
     }
 
     LOG(logger, Common::SeverityLevel::debug) << "Generation of relations finished.";
@@ -154,17 +154,18 @@ Common::Configuration parseArguments(int argc, char** argv) {
         "skew",
         boost::program_options::value<double>(&configuration.SkewParameter)->default_value(1.05),
         "Parameter of skew for Zipf distribution used for the generation of tuples for secondary "
-        "relation.")("log",
-                     boost::program_options::value<Common::SeverityLevel>(
-                         &configuration.LoggerConfig.LogLevel)
-                         ->default_value(Common::debug, "trace"),
-                     "Logging level. One of {trace, debug, info, error, critical}.")(
+        "relation.")(
+        "log",
+        boost::program_options::value<Common::SeverityLevel>(&configuration.LoggerConfig.LogLevel)
+            ->default_value(Common::debug, "trace"),
+        "Logging level. One of {trace, debug, info, error, critical}.")(
         "join",
         boost::program_options::value<Common::JoinAlgorithmType>(&configuration.JoinType)
             ->required(),
         "Type of join algorithm: either no-partitioning or radix-partitioning.")(
         "format",
-        boost::program_options::value<Common::ResultsFormat>(&configuration.OutputFormatConfig.Format)
+        boost::program_options::value<Common::ResultsFormat>(
+            &configuration.OutputFormatConfig.Format)
             ->default_value(Common::ResultsFormat::JSON),
         "Format of the output. Currently only JSON is supported.")(
         "unit,u",
@@ -254,22 +255,29 @@ int main(int argc, char** argv) {
 
     // Run selected join algorithm
     Common::HashJoinTimingResult joinResults;
-    switch (configuration.JoinType) {
-        case Common::JoinAlgorithmType::NoPartitioning: {
-            joinResults =
-                joinNoPartitioning(logger, configuration, threadPool, relations, hashTableFactory);
-            break;
+
+    try {
+        switch (configuration.JoinType) {
+            case Common::JoinAlgorithmType::NoPartitioning: {
+                joinResults = joinNoPartitioning(logger, configuration, threadPool, relations,
+                                                 hashTableFactory);
+                break;
+            }
+            case Common::JoinAlgorithmType::RadixParitioning: {
+                HasherType partitionsHasher{};
+                joinResults = joinRadixPartitioning(logger, configuration, threadPool, relations,
+                                                    partitionsHasher, hashTableFactory);
+                break;
+            }
+            default:
+                std::stringstream is;
+                is << "Unrecognized join algorithm: " << configuration.JoinType << ".";
+                throw std::runtime_error(is.str());
         }
-        case Common::JoinAlgorithmType::RadixParitioning: {
-            HasherType partitionsHasher{};
-            joinResults = joinRadixPartitioning(logger, configuration, threadPool, relations,
-                                                partitionsHasher, hashTableFactory);
-            break;
-        }
-        default:
-            std::stringstream is;
-            is << "Unrecognized join algorithm: " << configuration.JoinType << ".";
-            throw std::runtime_error(is.str());
+    } catch (std::exception& e) {
+        LOG(logger, Common::SeverityLevel::error)
+            << "Hash join algorithm stopped due to exception begin raised: " << e.what();
+        exit(1);
     }
 
     // Output results of the join algorithm

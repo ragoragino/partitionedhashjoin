@@ -1,12 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <map>
 #include <thread>
 #include <vector>
-#include <algorithm>
 
 #include "Common/IHasher.hpp"
 #include "Common/Table.hpp"
@@ -159,18 +159,16 @@ class SeparateChainingHashTable {
         std::for_each(m_bucketPtrsLatches.begin(), m_bucketPtrsLatches.end(),
                       [](std::atomic_flag& latch) { latch.clear(); });
 
-        if (m_numberOfBuckets <= 0) {
-            throw std::invalid_argument("numberOfBuckets must be greater than zero.");
-        } else if (numberOfObjects <= 0) {
-            throw std::invalid_argument("numberOfObjects must be greater than zero.");
+        if (numberOfObjects == 0) {
+            throw std::invalid_argument(
+                "SeparateChainingHashTable::SeparateChainingHashTable: numberOfObjects must be "
+                "greater than zero.");
         }
 
         size_t bucketAllocatorBufferSize = static_cast<size_t>(
-            ceil(static_cast<double>(numberOfObjects) / static_cast<double>(BucketSize)));
+            std::ceil(static_cast<double>(numberOfObjects) / static_cast<double>(BucketSize)));
 
-        if (bucketAllocatorBufferSize > 1) {
-            m_bucketAllocator = BucketAllocator(bucketAllocatorBufferSize, nullptr);
-        }
+        m_bucketAllocator = BucketAllocator(bucketAllocatorBufferSize, nullptr);
     }
 
     // thread-safe

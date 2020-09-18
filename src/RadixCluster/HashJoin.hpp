@@ -215,10 +215,10 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory,
     partitionedTableAFuture.wait();
     partitionedTableBFuture.wait();
 
-    if (!partitionedTableAFuture.get().Empty()) {
-        throw partitionedTableAFuture.get().Pop();
-    } else if (!partitionedTableBFuture.get().Empty()) {
-        throw partitionedTableBFuture.get().Pop();
+    if (auto tasksErrors = partitionedTableAFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
+    } else if (auto tasksErrors = partitionedTableBFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
     }
 
     timer->SetPartitioningPhaseEnd();
@@ -231,8 +231,8 @@ std::shared_ptr<Common::Table<Common::JoinedTuple>> HashJoiner<HashTableFactory,
 
     joinFuture.wait();
 
-    if (!joinFuture.get().Empty()) {
-        throw joinFuture.get().Pop();
+    if (auto tasksErrors = joinFuture.get(); !tasksErrors.Empty()) {
+        throw tasksErrors.Pop();
     }
 
     LOG(m_logger, Common::debug) << "Finished hash partitioning.";
@@ -255,8 +255,8 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
     auto internalDurationMeasurer =
         std::make_shared<internal::BuildAndProbeRepresentativeDurationMeasurer>();
 
-    auto join = [this, joinedTable, partitionedTableA, partitionedTableB, &partitionConfiguration,
-                 &partitionInfo, numberOfJoinedPartitions, numberOfJoinedTuples,
+    auto join = [this, joinedTable, partitionedTableA, partitionedTableB, partitionConfiguration,
+                 partitionInfo, numberOfJoinedPartitions, numberOfJoinedTuples,
                  internalDurationMeasurer, timer](size_t id) {
         LOG(m_logger, Common::SeverityLevel::debug)
             << "Partition " << id << " starting join process.";
@@ -269,6 +269,11 @@ std::future<Common::TasksErrorHolder> HashJoiner<HashTableFactory, HasherType>::
              partitionId += partitionConfiguration.first.NumberOfWorkers) {
             auto [partitionStartA, partitionEndA] =
                 partitionInfo.first.GetPartitionBoundaries(partitionId);
+
+            if (partitionEndA - partitionStartA == 0) {
+                numberOfJoinedPartitions->operator++();
+                continue;
+            }
 
             auto hashTable = m_hashTableFactory.New(partitionEndA - partitionStartA);
 
