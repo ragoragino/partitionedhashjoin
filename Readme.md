@@ -55,7 +55,10 @@ This project is licensed under the MIT License.
 
 ## Results
 
-See directory results for details (results were obtained with default relation size values, i.e. 10 million tuples for the primary and 200 million tuples for the secondary relation).
+Experiment results were obtained with default relation size values, i.e. 10 million tuples for the primary and 200 million tuples for the secondary relation.
+The tests were run on a local machine with AMD Ryzen 7 3700X 8-Core Processor (16 logical cores) 3.6Ghz and 32GB RAM (2400Mhz).
+
+See directory results for details.
 
 ![alt text](https://github.com/ragoragino/partitionedhashjoin/blob/master/results/1.05/figure.png?raw=true)
 ![alt text](https://github.com/ragoragino/partitionedhashjoin/blob/master/results/1.25/figure.png?raw=true)
